@@ -1,6 +1,6 @@
 [package]
 name = "http_req"
-version = "0.1.0"
+version = "0.1.1"
 license = "MIT"
 description = "minimal library for making HTTP requests."
 repository = "https://github.com/jayjamesjay/http_req"
