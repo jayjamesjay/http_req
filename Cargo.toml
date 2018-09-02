@@ -3,7 +3,9 @@ name = "http_req"
 version = "0.1.0"
 license = "MIT"
 description = "minimal library for making HTTP requests."
+repository = "https://github.com/jayjamesjay/http_req"
 authors = ["jajamesjay <kubaj55@poczta.fm>"]
+travis-ci = { repository = "https://github.com/jayjamesjay/http_req", branch = "master" }
 
 [dependencies]
 native-tls = "0.2.1"
