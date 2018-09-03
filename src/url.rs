@@ -198,7 +198,7 @@ fn get_chunks(s: &str, separator: &str) -> (Option<String>, Option<String>) {
     match s.find(separator) {
         Some(i) => {
             let (chunk, rest) = s.split_at(i);
-            let rest = rest[separator.len()..].to_string();
+            let rest = &rest[separator.len()..];
             let mut rest = if rest.is_empty() {
                 None
             } else {

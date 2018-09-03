@@ -1,11 +1,14 @@
 [package]
 name = "http_req"
-version = "0.1.1"
+version = "0.1.2"
 license = "MIT"
-description = "minimal library for making HTTP requests."
+description = "simple HTTP client with built-in HTTPS support"
 repository = "https://github.com/jayjamesjay/http_req"
 authors = ["jajamesjay <kubaj55@poczta.fm>"]
-travis-ci = { repository = "https://github.com/jayjamesjay/http_req", branch = "master" }
+readme = "README.md"
 
 [dependencies]
 native-tls = "0.2.1"
+
+[badges]
+travis-ci = { repository = "jayjamesjay/http_req"}

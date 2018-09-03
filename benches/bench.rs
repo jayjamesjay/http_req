@@ -2,7 +2,7 @@
 extern crate http_req;
 extern crate test;
 
-use http_req::{Url, response::Response};
+use http_req::{response::Response, url::Url};
 use std::{fs::File, io::Read};
 use test::Bencher;
 
