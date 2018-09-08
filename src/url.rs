@@ -29,12 +29,12 @@ pub struct Url {
 }
 
 impl Url {
-    ///Returs scheme
+    ///Returs scheme of this `Url`.
     pub fn scheme(&self) -> &str {
         &self.scheme
     }
 
-    ///Returs information about the user
+    ///Returs information about the user included in this `Url`.
     pub fn user_info(&self) -> &str {
         match self.authority {
             Some(ref a) => match a.user_info {
@@ -45,7 +45,7 @@ impl Url {
         }
     }
 
-    ///Returs host
+    ///Returs host of this `Url`.
     pub fn host(&self) -> &str {
         match self.authority {
             Some(ref a) => match a.host {
@@ -56,7 +56,7 @@ impl Url {
         }
     }
 
-    ///Returs port. If it hasn't been set in the parsed Url, returns default port
+    ///Returs port of this `Url`. If it hasn't been set in the parsed Url, returns default port.
     pub fn port(&self) -> u16 {
         let default_port = match self.scheme.as_ref() {
             "https" => HTTPS_PORT,
@@ -69,7 +69,7 @@ impl Url {
         }
     }
 
-    ///Returs path
+    ///Returs path of this `Url`.
     pub fn path(&self) -> &str {
         match self.path {
             Some(ref s) => s,
@@ -77,7 +77,7 @@ impl Url {
         }
     }
 
-    ///Returs query
+    ///Returs query of this `Url`.
     pub fn query(&self) -> &str {
         match self.query {
             Some(ref s) => s,
@@ -85,7 +85,7 @@ impl Url {
         }
     }
 
-    ///Returs fragment
+    ///Returs fragment of this `Url`.
     pub fn fragment(&self) -> &str {
         match self.fragment {
             Some(ref s) => s,
@@ -93,6 +93,7 @@ impl Url {
         }
     }
 
+    ///Returs resource `Url` points to.
     pub fn resource(&self) -> String {
         let query = if self.query().is_empty() {
             "".to_string()

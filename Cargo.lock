@@ -67,7 +67,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "http_req"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "native-tls 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
