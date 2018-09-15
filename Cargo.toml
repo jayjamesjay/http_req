@@ -1,11 +1,13 @@
 [package]
 name = "http_req"
-version = "0.2.0"
+version = "0.2.1"
 license = "MIT"
 description = "simple HTTP client with built-in HTTPS support"
 repository = "https://github.com/jayjamesjay/http_req"
 authors = ["jajamesjay <kubaj55@poczta.fm>"]
 readme = "README.md"
+categories = ["web-programming::http-client", "network-programming"]
+keywords = ["http", "client", "request"]
 
 [dependencies]
 native-tls = "0.2.1"

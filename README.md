@@ -5,6 +5,11 @@
 Simple HTTP client with built-in HTTPS support.
 Currently it's in heavy development and may frequently change.
 
+## Requirements
+http_req uses [rust-native-tls](https://github.com/sfackler/rust-native-tls),
+which uses TLS framework provided by OS on Windows and macOS, and OpenSSL
+on all other platforms.
+
 ## Example
 Basic GET request
 ```rust

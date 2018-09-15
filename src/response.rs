@@ -111,8 +111,7 @@ impl Response {
                 let pos = elem.find(":").unwrap();
                 let (key, value) = elem.split_at(pos);
                 (key.to_string(), value[2..].to_string())
-            })
-            .collect()
+            }).collect()
     }
 
     ///Returns status code of this `Response`.
@@ -193,7 +192,8 @@ where
 mod tests {
     use super::*;
 
-    //"HTTP/1.1 200 OK\r\nDate: Sat, 11 Jan 2003 02:44:04 GMT\r\nContent-Type: text/html\r\nContent-Length: 100\r\n\r\n<html>hello</html>\r\n\r\nhello"
+    //"HTTP/1.1 200 OK\r\nDate: Sat, 11 Jan 2003 02:44:04 GMT\r\nContent-Type: text/html\r\n
+    //Content-Length: 100\r\n\r\n<html>hello</html>\r\n\r\nhello"
     const RESPONSE: [u8; 129] = [
         72, 84, 84, 80, 47, 49, 46, 49, 32, 50, 48, 48, 32, 79, 75, 13, 10, 68, 97, 116, 101, 58,
         32, 83, 97, 116, 44, 32, 49, 49, 32, 74, 97, 110, 32, 50, 48, 48, 51, 32, 48, 50, 58, 52,
