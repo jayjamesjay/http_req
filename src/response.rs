@@ -1,8 +1,8 @@
 //! parsing server response
 use super::*;
-use std::str;
+use std::{fmt, str};
 
-pub const CR_LF_2: [u8; 4] = [13, 10, 13, 10];
+pub(crate) const CR_LF_2: [u8; 4] = [13, 10, 13, 10];
 
 pub struct Response {
     status: Status,
@@ -95,10 +95,10 @@ impl Response {
     }
 
     fn parse_status_line(status_line: &str) -> Result<Status, ParseIntError> {
-        let status_line: Vec<&str> = status_line.split_whitespace().collect();
+        let status_line: Vec<_> = status_line.split_whitespace().collect();
 
         let version = status_line[0];
-        let code = status_line[1].parse()?;
+        let code: u16 = status_line[1].parse()?;
         let reason = status_line[2];
 
         Ok(Status::from((version, code, reason)))
@@ -115,7 +115,7 @@ impl Response {
     }
 
     ///Returns status code of this `Response`.
-    pub fn status_code(&self) -> u16 {
+    pub fn status_code(&self) -> StatusCode {
         self.status.code
     }
 
@@ -153,22 +153,75 @@ impl Response {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub struct StatusCode(u16);
+
+impl StatusCode {
+    pub fn new(code: u16) -> StatusCode {
+        StatusCode(code)
+    }
+
+    ///Checks if this `StatusCode` is within 100-199, which indicates that it's Informational.
+    pub fn is_info(&self) -> bool {
+        self.0 >= 100 && self.0 < 200
+    }
+
+    ///Checks if this `StatusCode` is within 200-299, which indicates that it's Successful.
+    pub fn is_success(&self) -> bool {
+        self.0 >= 200 && self.0 < 300
+    }
+
+    ///Checks if this `StatusCode` is within 300-399, which indicates that it's Redirection.
+    pub fn is_redirect(&self) -> bool {
+        self.0 >= 300 && self.0 < 400
+    }
+
+    ///Checks if this `StatusCode` is within 400-499, which indicates that it's Client Error.
+    pub fn is_client_err(&self) -> bool {
+        self.0 >= 400 && self.0 < 500
+    }
+
+    ///Checks if this `StatusCode` is within 500-599, which indicates that it's Server Error.
+    pub fn is_server_err(&self) -> bool {
+        self.0 >= 500 && self.0 < 600
+    }
+}
+
+impl From<StatusCode> for u16 {
+    fn from(code: StatusCode) -> Self {
+        code.0
+    }
+}
+
+impl From<u16> for StatusCode {
+    fn from(code: u16) -> Self {
+        StatusCode(code)
+    }
+}
+
+impl fmt::Display for StatusCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(PartialEq, Debug)]
 pub struct Status {
     version: String,
-    code: u16,
+    code: StatusCode,
     reason: String,
 }
 
-impl<T, U> From<(T, u16, U)> for Status
+impl<T, U, V> From<(T, U, V)> for Status
 where
     T: ToString,
-    U: ToString,
+    V: ToString,
+    StatusCode: From<U>,
 {
-    fn from(status: (T, u16, U)) -> Status {
+    fn from(status: (T, U, V)) -> Status {
         Status {
             version: status.0.to_string(),
-            code: status.1,
+            code: StatusCode::from(status.1),
             reason: status.2.to_string(),
         }
     }
@@ -228,12 +281,79 @@ mod tests {
         "Content-Length: 100",
     ];
 
+    const CODE_S: StatusCode = StatusCode(200);
+
+    #[test]
+    fn u16_from_status_code() {
+        assert_eq!(u16::from(CODE_S), 200);
+    }
+
+    #[test]
+    fn status_code_from() {
+        assert_eq!(StatusCode::from(200), StatusCode(200));
+    }
+
+    #[test]
+    fn status_code_info() {
+        for i in 100..200 {
+            assert!(StatusCode::new(i).is_info())
+        }
+
+        for i in (0..1000).filter(|&i| i < 100 || i >= 200) {
+            assert!(!StatusCode::new(i).is_info())
+        }
+    }
+
+    #[test]
+    fn status_code_success() {
+        for i in 200..300 {
+            assert!(StatusCode::new(i).is_success())
+        }
+
+        for i in (0..1000).filter(|&i| i < 200 || i >= 300) {
+            assert!(!StatusCode::new(i).is_success())
+        }
+    }
+
+    #[test]
+    fn status_code_redirect() {
+        for i in 300..400 {
+            assert!(StatusCode::new(i).is_redirect())
+        }
+
+        for i in (0..1000).filter(|&i| i < 300 || i >= 400) {
+            assert!(!StatusCode::new(i).is_redirect())
+        }
+    }
+
+    #[test]
+    fn status_code_client_err() {
+        for i in 400..500 {
+            assert!(StatusCode::new(i).is_client_err())
+        }
+
+        for i in (0..1000).filter(|&i| i < 400 || i >= 500) {
+            assert!(!StatusCode::new(i).is_client_err())
+        }
+    }
+
+    #[test]
+    fn status_code_server_err() {
+        for i in 500..600 {
+            assert!(StatusCode::new(i).is_server_err())
+        }
+
+        for i in (0..1000).filter(|&i| i < 500 || i >= 600) {
+            assert!(!StatusCode::new(i).is_server_err())
+        }
+    }
+
     #[test]
     fn status_from() {
         let status = Status::from((VERSION, CODE, REASON));
 
         assert_eq!(status.version, VERSION);
-        assert_eq!(status.code, CODE);
+        assert_eq!(status.code, CODE_S);
         assert_eq!(status.reason, REASON);
     }
 
@@ -310,7 +430,7 @@ mod tests {
     #[test]
     fn res_status_code() {
         let res = Response::try_from(&RESPONSE).unwrap();
-        assert_eq!(res.status_code(), 200);
+        assert_eq!(res.status_code(), CODE_S);
     }
 
     #[test]

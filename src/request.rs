@@ -211,6 +211,7 @@ pub fn head(url: &str) -> Result<Response, Box<Error>> {
 mod tests {
     use super::*;
 
+    const UNSUCCESS_CODE: u16 = 400;
     const URL: &str = "http://doc.rust-lang.org/std/string/index.html";
     const URL_S: &str = "https://doc.rust-lang.org/std/string/index.html";
     const BODY: [u8; 14] = [78, 97, 109, 101, 61, 74, 97, 109, 101, 115, 43, 74, 97, 121];
@@ -282,7 +283,7 @@ mod tests {
 
         let res = req.handle_stream(&mut stream, &msg).unwrap();
 
-        assert_ne!(res.status_code(), 400);
+        assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
     }
 
     #[test]
@@ -311,7 +312,7 @@ mod tests {
     #[ignore]
     #[test]
     fn request_b_secure_conn() {
-        let req = RequestBuilder::new(URL.parse().unwrap());
+        let req = RequestBuilder::new(URL_S.parse().unwrap());
         let stream = req.connect().unwrap();
 
         req.secure_conn(stream).unwrap();
@@ -321,19 +322,19 @@ mod tests {
     #[test]
     fn request_get() {
         let res = get(URL).unwrap();
-        assert_ne!(res.status_code(), 400);
+        assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
 
         let res = get(URL_S).unwrap();
-        assert_ne!(res.status_code(), 400);
+        assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
     }
 
     #[ignore]
     #[test]
     fn request_head() {
         let res = head(URL).unwrap();
-        assert_ne!(res.status_code(), 400);
+        assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
 
         let res = head(URL_S).unwrap();
-        assert_ne!(res.status_code(), 400);
+        assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
     }
 }

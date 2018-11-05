@@ -1,6 +1,6 @@
 [package]
 name = "http_req"
-version = "0.2.1"
+version = "0.3.0"
 license = "MIT"
 description = "simple HTTP client with built-in HTTPS support"
 repository = "https://github.com/jayjamesjay/http_req"
@@ -10,7 +10,7 @@ categories = ["web-programming::http-client", "network-programming"]
 keywords = ["http", "client", "request"]
 
 [dependencies]
-native-tls = "0.2.1"
+native-tls = "~0.2.2"
 
 [badges]
 travis-ci = { repository = "jayjamesjay/http_req"}
