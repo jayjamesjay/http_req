@@ -1,6 +1,6 @@
 //! parsing server response
-use super::*;
-use std::{fmt, str};
+use error::{Error, ParseErr};
+use std::{collections::HashMap, fmt, str};
 
 pub(crate) const CR_LF_2: [u8; 4] = [13, 10, 13, 10];
 
@@ -10,26 +10,11 @@ pub struct Response {
     body: Option<Vec<u8>>,
 }
 
-#[derive(Debug)]
-struct ResponseError(&'static str);
-
-impl fmt::Display for ResponseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error: {}", self)
-    }
-}
-
-impl Error for ResponseError {
-    fn description(&self) -> &str {
-        "Cannot parse Response"
-    }
-}
-
 impl Response {
     ///Parses response.
-    pub fn try_from(data: &[u8]) -> Result<Response, Box<Error>> {
+    pub fn try_from(data: &[u8]) -> Result<Response, Error> {
         if data.len() == 0 {
-            Err(ResponseError("Cannot parse Response from an empty slice."))?;
+            return Err(Error::Parse(ParseErr::Empty));
         }
 
         let head;
@@ -60,7 +45,7 @@ impl Response {
 
     ///Creates new `Response` with head - status and headers - created from a slice of bytes
     ///and an empty body.
-    pub fn new(head: &[u8]) -> Result<Response, Box<Error>> {
+    pub fn new(head: &[u8]) -> Result<Response, Error> {
         let (headers, status) = Self::parse_head(head)?;
 
         Ok(Response {
@@ -84,17 +69,18 @@ impl Response {
     }
 
     ///Parses head of a `Response` - status and headers - from slice of bytes.
-    pub fn parse_head(head: &[u8]) -> Result<(HashMap<String, String>, Status), Box<Error>> {
+    pub fn parse_head(head: &[u8]) -> Result<(HashMap<String, String>, Status), ParseErr> {
         let mut head: Vec<_> = str::from_utf8(head)?.lines().collect();
         head.pop();
 
         let status = Self::parse_status_line(&head.remove(0))?;
-        let headers = Self::parse_headers(&head);
+        let headers = Self::parse_headers(&head)?;
 
         Ok((headers, status))
     }
 
-    fn parse_status_line(status_line: &str) -> Result<Status, ParseIntError> {
+    ///Parses status line
+    pub fn parse_status_line(status_line: &str) -> Result<Status, ParseErr> {
         let status_line: Vec<_> = status_line.split_whitespace().collect();
 
         let version = status_line[0];
@@ -104,14 +90,21 @@ impl Response {
         Ok(Status::from((version, code, reason)))
     }
 
-    fn parse_headers(headers: &[&str]) -> HashMap<String, String> {
-        headers
-            .iter()
-            .map(|elem| {
-                let pos = elem.find(":").unwrap();
-                let (key, value) = elem.split_at(pos);
-                (key.to_string(), value[2..].to_string())
-            }).collect()
+    ///Parses headers
+    pub fn parse_headers(headers: &[&str]) -> Result<HashMap<String, String>, ParseErr> {
+        let correct_headers = headers.iter().all(|e| e.contains(":"));
+
+        if correct_headers {
+            Ok(headers
+                .iter()
+                .map(|elem| {
+                    let pos = elem.find(":").unwrap();
+                    let (key, value) = elem.split_at(pos);
+                    (key.to_string(), value[2..].to_string())
+                }).collect())
+        } else {
+            return Err(ParseErr::Invalid);
+        }
     }
 
     ///Returns status code of this `Response`.
@@ -144,15 +137,26 @@ impl Response {
 
     ///Returns length of the content of this `Response` as a `Result`, according to information
     ///included in headers. If there is no such an information, returns `Ok(0)`.
-    pub fn content_len(&self) -> Result<usize, ParseIntError> {
-        if let Some(p) = self.headers().get("Content-Length") {
-            Ok(p.parse()?)
-        } else {
-            Ok(0)
+    pub fn content_len(&self) -> Result<usize, ParseErr> {
+        match self.headers().get("Content-Length") {
+            Some(p) => Ok(p.parse()?),
+            None => Ok(0),
         }
     }
 }
 
+///Code sent by a server in response to a client's request.
+///# Example
+///```
+///extern crate http_req;
+///use http_req::response::StatusCode;
+///
+///fn main() {
+///   let code = StatusCode::from(200);
+///
+///   assert!(code.is_success())
+///}
+///```
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct StatusCode(u16);
 

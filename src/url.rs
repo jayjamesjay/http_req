@@ -1,22 +1,20 @@
 //! url operations
-use super::*;
+use error::{Error, ParseErr};
 use std::str::FromStr;
 
 const HTTP_PORT: u16 = 80;
 const HTTPS_PORT: u16 = 443;
 
-#[derive(Debug)]
-pub struct UrlError(&'static str);
-
-impl fmt::Display for UrlError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error: {}", self)
-    }
+pub trait RefOr<'a> {
+    fn ref_or(&'a self, def: &'a str) -> &'a str;
 }
 
-impl Error for UrlError {
-    fn description(&self) -> &str {
-        "Cannot parse Url"
+impl<'a> RefOr<'a> for Option<String> {
+    fn ref_or(&'a self, def: &'a str) -> &'a str {
+        match self {
+            Some(ref s) => s,
+            None => def,
+        }
     }
 }
 
@@ -37,10 +35,7 @@ impl Url {
     ///Returs information about the user included in this `Url`.
     pub fn user_info(&self) -> &str {
         match self.authority {
-            Some(ref a) => match a.user_info {
-                Some(ref i) => &i,
-                None => "",
-            },
+            Some(ref a) => a.user_info.ref_or(""),
             None => "",
         }
     }
@@ -48,10 +43,7 @@ impl Url {
     ///Returs host of this `Url`.
     pub fn host(&self) -> &str {
         match self.authority {
-            Some(ref a) => match a.host {
-                Some(ref i) => &i,
-                None => "",
-            },
+            Some(ref a) => a.host.ref_or(""),
             None => "",
         }
     }
@@ -71,48 +63,39 @@ impl Url {
 
     ///Returs path of this `Url`.
     pub fn path(&self) -> &str {
-        match self.path {
-            Some(ref s) => s,
-            None => "",
-        }
+        self.path.ref_or("")
     }
 
     ///Returs query of this `Url`.
     pub fn query(&self) -> &str {
-        match self.query {
-            Some(ref s) => s,
-            None => "",
-        }
+        self.query.ref_or("")
     }
 
     ///Returs fragment of this `Url`.
     pub fn fragment(&self) -> &str {
-        match self.fragment {
-            Some(ref s) => s,
-            None => "",
-        }
+        self.fragment.ref_or("")
     }
 
     ///Returs resource `Url` points to.
     pub fn resource(&self) -> String {
-        let query = if self.query().is_empty() {
-            "".to_string()
-        } else {
-            "?".to_string() + self.query()
-        };
+        let path = self.path().to_string();
 
-        self.path().to_string() + &query
+        if self.query().is_empty() {
+            path
+        } else {
+            path + "?" + &self.query()
+        }
     }
 }
 
 impl FromStr for Url {
-    type Err = UrlError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (scheme, mut url_part) = get_chunks(s, ":");
         let scheme = match scheme {
             Some(s) => s,
-            None => return Err(UrlError("Url must have scheme")),
+            None => return Err(Error::Parse(ParseErr::Empty)),
         };
 
         let mut authority = None;
@@ -123,7 +106,7 @@ impl FromStr for Url {
                 authority = match auth {
                     Some(a) => match a.parse::<Authority>() {
                         Ok(i) => Some(i),
-                        Err(_e) => return Err(UrlError("Cannot parse authority")),
+                        Err(e) => return Err(Error::Parse(e)),
                     },
                     None => None,
                 };
@@ -152,7 +135,7 @@ struct Authority {
 }
 
 impl FromStr for Authority {
-    type Err = ParseIntError;
+    type Err = ParseErr;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut s = s.to_string();
@@ -170,10 +153,9 @@ impl FromStr for Authority {
 
         let (host, url_part) = chunk(url_part, ":");
 
-        let port = if let Some(p) = url_part {
-            Some(p.parse()?)
-        } else {
-            None
+        let port = match url_part {
+            Some(p) => Some(p.parse()?),
+            None => None,
         };
 
         Ok(Authority {

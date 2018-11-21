@@ -3,6 +3,7 @@ use super::*;
 use native_tls::{TlsConnector, TlsStream};
 use response::Response;
 use std::{
+    collections::HashMap,
     io::{self, Read, Write},
     net::TcpStream,
 };
@@ -88,7 +89,7 @@ impl<'a> RequestBuilder<'a> {
 
     ///Sends HTTP request. Opens TCP connection, writes request message to stream.
     ///Returns response if operation suceeded.
-    pub fn send(&self) -> Result<Response, Box<Error>> {
+    pub fn send(&self) -> Result<Response, error::Error> {
         let res;
         let msg = self.parse_msg();
         let mut stream = self.connect()?;
@@ -104,7 +105,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     //Writes message to stream. Reads server response.
-    fn handle_stream<T>(&self, stream: &mut T, msg: &[u8]) -> Result<Response, Box<Error>>
+    fn handle_stream<T>(&self, stream: &mut T, msg: &[u8]) -> Result<Response, error::Error>
     where
         T: Write + Read,
     {
@@ -124,7 +125,7 @@ impl<'a> RequestBuilder<'a> {
         Ok(res)
     }
 
-    fn res_head<T>(stream: &mut T) -> Result<(Vec<u8>, Vec<u8>), Box<Error>>
+    fn res_head<T>(stream: &mut T) -> Result<(Vec<u8>, Vec<u8>), io::Error>
     where
         T: Write + Read,
     {
@@ -189,20 +190,20 @@ impl<'a> RequestBuilder<'a> {
     }
 
     //Opens secure connnection over TlsStream
-    fn secure_conn(&self, stream: TcpStream) -> Result<TlsStream<TcpStream>, Box<Error>> {
+    fn secure_conn(&self, stream: TcpStream) -> Result<TlsStream<TcpStream>, error::Error> {
         let connector = TlsConnector::new()?;
         Ok(connector.connect(self.url.host(), stream)?)
     }
 }
 
 ///Creates and sends GET request. Returns response for that request.
-pub fn get(url: &str) -> Result<Response, Box<Error>> {
+pub fn get(url: &str) -> Result<Response, error::Error> {
     let url = url.parse::<Url>()?;
     RequestBuilder::new(url).send()
 }
 
 ///Creates and sends HEAD request. Returns response for that request.
-pub fn head(url: &str) -> Result<Response, Box<Error>> {
+pub fn head(url: &str) -> Result<Response, error::Error> {
     let url = url.parse::<Url>()?;
     RequestBuilder::new(url).method(Method::HEAD).send()
 }
