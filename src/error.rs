@@ -23,7 +23,7 @@ impl StdErr for ParseErr {
             Utf8(_) => "invalid character",
             Int(_) => "cannot parse number",
             Empty => "nothing to parse",
-            Invalid => "invalid value"
+            Invalid => "invalid value",
         }
     }
 }
@@ -58,7 +58,7 @@ impl StdErr for Error {
         use self::Error::*;
 
         match self {
-            IO(_e) => "IO error",
+            IO(_) => "IO error",
             Parse(e) => e.description(),
             Tls => "TLS error",
         }

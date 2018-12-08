@@ -1,71 +1,37 @@
 //! parsing server response
-use error::{Error, ParseErr};
-use std::{collections::HashMap, fmt, str};
+use crate::error::{Error, ParseErr};
+use std::{collections::HashMap, fmt, io::Write, str};
 
 pub(crate) const CR_LF_2: [u8; 4] = [13, 10, 13, 10];
 
 pub struct Response {
     status: Status,
     headers: HashMap<String, String>,
-    body: Option<Vec<u8>>,
 }
 
 impl Response {
-    ///Parses response.
-    pub fn try_from(data: &[u8]) -> Result<Response, Error> {
-        if data.len() == 0 {
+    ///Creates new `Response` with head - status and headers - parsed from a slice of bytes
+    pub fn from_head(head: &[u8]) -> Result<Response, Error> {
+        let (headers, status) = Self::parse_head(head)?;
+
+        Ok(Response { status, headers })
+    }
+
+    ///Parses `Response` from slice of bytes. Writes it's body to `writer`.
+    pub fn try_from<T: Write>(res: &[u8], writer: &mut T) -> Result<Response, Error> {
+        if res.len() == 0 {
             return Err(Error::Parse(ParseErr::Empty));
         }
 
-        let head;
-        let mut body = None;
-
-        let pos = match find_slice(&data, &CR_LF_2) {
-            Some(p) => p,
-            None => 0,
-        };
-
-        match pos {
-            0 => head = data,
-            _ => {
-                let (h, b) = data.split_at(pos);
-                head = h;
-                body = Some(b.to_vec());
-            }
+        let mut pos = res.len();
+        if let Some(v) = find_slice(res, &CR_LF_2) {
+            pos = v;
         }
 
-        let (headers, status) = Self::parse_head(head)?;
+        let response = Self::from_head(&res[..pos])?;
+        writer.write_all(&res[pos..])?;
 
-        Ok(Response {
-            status,
-            headers,
-            body,
-        })
-    }
-
-    ///Creates new `Response` with head - status and headers - created from a slice of bytes
-    ///and an empty body.
-    pub fn new(head: &[u8]) -> Result<Response, Error> {
-        let (headers, status) = Self::parse_head(head)?;
-
-        Ok(Response {
-            status,
-            headers,
-            body: None,
-        })
-    }
-
-    ///Adds body to a response.
-    pub fn append_body(&mut self, mut body: Vec<u8>) {
-        let body_empty = self.body.is_none();
-
-        if body_empty {
-            self.body = Some(body);
-        } else {
-            if let Some(v) = &mut self.body {
-                v.append(&mut body);
-            }
-        }
+        Ok(response)
     }
 
     ///Parses head of a `Response` - status and headers - from slice of bytes.
@@ -81,7 +47,7 @@ impl Response {
 
     ///Parses status line
     pub fn parse_status_line(status_line: &str) -> Result<Status, ParseErr> {
-        let status_line: Vec<_> = status_line.split_whitespace().collect();
+        let status_line: Vec<_> = status_line.splitn(3, ' ').collect();
 
         let version = status_line[0];
         let code: u16 = status_line[1].parse()?;
@@ -101,7 +67,8 @@ impl Response {
                     let pos = elem.find(":").unwrap();
                     let (key, value) = elem.split_at(pos);
                     (key.to_string(), value[2..].to_string())
-                }).collect())
+                })
+                .collect())
         } else {
             return Err(ParseErr::Invalid);
         }
@@ -127,14 +94,6 @@ impl Response {
         &self.headers
     }
 
-    ///Returns body of this `Response`.
-    pub fn body(&self) -> &[u8] {
-        match self.body {
-            Some(ref b) => &b,
-            None => &[],
-        }
-    }
-
     ///Returns length of the content of this `Response` as a `Result`, according to information
     ///included in headers. If there is no such an information, returns `Ok(0)`.
     pub fn content_len(&self) -> Result<usize, ParseErr> {
@@ -148,7 +107,6 @@ impl Response {
 ///Code sent by a server in response to a client's request.
 ///# Example
 ///```
-///extern crate http_req;
 ///use http_req::response::StatusCode;
 ///
 ///fn main() {
@@ -370,29 +328,23 @@ mod tests {
     }
 
     #[test]
+    fn res_from_head() {
+        Response::from_head(&RESPONSE_H).unwrap();
+    }
+
+    #[test]
     fn res_try_from() {
-        Response::try_from(&RESPONSE).unwrap();
-        Response::try_from(&RESPONSE_H).unwrap();
+        let mut writer = Vec::new();
+
+        Response::try_from(&RESPONSE, &mut writer).unwrap();
+        Response::try_from(&RESPONSE_H, &mut writer).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn res_from_empty() {
-        Response::try_from(&[]).unwrap();
-    }
-
-    #[test]
-    fn res_new() {
-        Response::try_from(&RESPONSE_H).unwrap();
-    }
-
-    #[test]
-    fn res_append_body() {
-        let mut res = Response::try_from(&RESPONSE_H).unwrap();
-        let body = BODY.to_vec();
-
-        res.append_body(body);
-        assert_eq!(res.body(), BODY);
+        let mut writer = Vec::new();
+        Response::try_from(&[], &mut writer).unwrap();
     }
 
     #[test]
@@ -412,6 +364,12 @@ mod tests {
     }
 
     #[test]
+    fn res_parse_status_line() {
+        let status = Response::parse_status_line(STATUS_LINE).unwrap();
+        assert_eq!(status, Status::from((VERSION, CODE, REASON)))
+    }
+
+    #[test]
     fn res_parse_headers() {
         let mut headers = HashMap::with_capacity(2);
         headers.insert(
@@ -426,32 +384,34 @@ mod tests {
     }
 
     #[test]
-    fn res_parse_status_line() {
-        let status = Response::parse_status_line(STATUS_LINE).unwrap();
-        assert_eq!(status, Status::from((VERSION, CODE, REASON)))
-    }
-
-    #[test]
     fn res_status_code() {
-        let res = Response::try_from(&RESPONSE).unwrap();
+        let mut writer = Vec::new();
+        let res = Response::try_from(&RESPONSE, &mut writer).unwrap();
+
         assert_eq!(res.status_code(), CODE_S);
     }
 
     #[test]
     fn res_version() {
-        let res = Response::try_from(&RESPONSE).unwrap();
+        let mut writer = Vec::new();
+        let res = Response::try_from(&RESPONSE, &mut writer).unwrap();
+
         assert_eq!(res.version(), "HTTP/1.1");
     }
 
     #[test]
     fn res_reason() {
-        let res = Response::try_from(&RESPONSE).unwrap();
+        let mut writer = Vec::new();
+        let res = Response::try_from(&RESPONSE, &mut writer).unwrap();
+
         assert_eq!(res.reason(), "OK");
     }
 
     #[test]
     fn res_headers() {
-        let res = Response::try_from(&RESPONSE).unwrap();
+        let mut writer = Vec::new();
+        let res = Response::try_from(&RESPONSE, &mut writer).unwrap();
+
         let mut headers = HashMap::with_capacity(2);
         headers.insert(
             "Date".to_string(),
@@ -464,17 +424,18 @@ mod tests {
     }
 
     #[test]
-    fn res_body() {
-        let res = Response::try_from(&RESPONSE).unwrap();
-        assert_eq!(res.body(), BODY);
+    fn res_content_len() {
+        let mut writer = Vec::with_capacity(101);
+        let res = Response::try_from(&RESPONSE, &mut writer).unwrap();
 
-        let res = Response::try_from(&RESPONSE_H).unwrap();
-        assert_eq!(res.body(), []);
+        assert_eq!(res.content_len(), Ok(100));
     }
 
     #[test]
-    fn res_content_len() {
-        let res = Response::try_from(&RESPONSE).unwrap();
-        assert_eq!(res.content_len(), Ok(100));
+    fn res_body() {
+        let mut writer = Vec::new();
+        Response::try_from(&RESPONSE, &mut writer).unwrap();
+
+        assert_eq!(writer, &BODY);
     }
 }

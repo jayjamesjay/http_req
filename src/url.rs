@@ -1,5 +1,5 @@
 //! url operations
-use error::{Error, ParseErr};
+use crate::error::{Error, ParseErr};
 use std::str::FromStr;
 
 const HTTP_PORT: u16 = 80;
@@ -18,6 +18,7 @@ impl<'a> RefOr<'a> for Option<String> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Url {
     scheme: String,
     authority: Option<Authority>,
@@ -128,6 +129,7 @@ impl FromStr for Url {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 struct Authority {
     user_info: Option<String>,
     host: Option<String>,
@@ -182,7 +184,7 @@ fn get_chunks(s: &str, separator: &str) -> (Option<String>, Option<String>) {
         Some(i) => {
             let (chunk, rest) = s.split_at(i);
             let rest = &rest[separator.len()..];
-            let mut rest = if rest.is_empty() {
+            let rest = if rest.is_empty() {
                 None
             } else {
                 Some(rest.to_string())

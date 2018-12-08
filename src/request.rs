@@ -1,18 +1,20 @@
 //! creating and sending HTTP requests
-use super::*;
+use crate::{
+    error,
+    response::{self, Response},
+    url::Url,
+};
 use native_tls::{TlsConnector, TlsStream};
-use response::Response;
 use std::{
     collections::HashMap,
     io::{self, Read, Write},
     net::TcpStream,
 };
-use url::Url;
 
 const CR_LF: &str = "\r\n";
 const HTTP_V: &str = "HTTP/1.1";
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Method {
     GET,
     HEAD,
@@ -39,6 +41,7 @@ impl Method {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct RequestBuilder<'a> {
     url: Url,
     method: Method,
@@ -51,7 +54,7 @@ impl<'a> RequestBuilder<'a> {
     ///Creates new RequestBuilder with default parameters
     pub fn new(url: Url) -> RequestBuilder<'a> {
         RequestBuilder {
-            headers: Self::default_headers(url.host()),
+            headers: Self::parse_default_headers(url.host()),
             url: url,
             method: Method::GET,
             version: HTTP_V,
@@ -72,9 +75,9 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Adds new header to existing/default headers
-    pub fn add_header<T, U>(&mut self, key: T, val: U) -> &mut Self
+    pub fn add_header<V, U>(&mut self, key: V, val: U) -> &mut Self
     where
-        T: ToString,
+        V: ToString,
         U: ToString,
     {
         self.headers.insert(key.to_string(), val.to_string());
@@ -89,51 +92,51 @@ impl<'a> RequestBuilder<'a> {
 
     ///Sends HTTP request. Opens TCP connection, writes request message to stream.
     ///Returns response if operation suceeded.
-    pub fn send(&self) -> Result<Response, error::Error> {
+    pub fn send<T: Write + Read, U: Write>(
+        &self,
+        writer: &mut U,
+    ) -> Result<Response, error::Error> {
         let res;
         let msg = self.parse_msg();
         let mut stream = self.connect()?;
 
         if self.url.scheme() == "https" {
             let mut stream = self.secure_conn(stream)?;
-            res = self.handle_stream(&mut stream, &msg)?;
+            res = self.handle_stream(&mut stream, &msg, writer)?;
         } else {
-            res = self.handle_stream(&mut stream, &msg)?;
+            res = self.handle_stream(&mut stream, &msg, writer)?;
         }
 
         Ok(res)
     }
 
     //Writes message to stream. Reads server response.
-    fn handle_stream<T>(&self, stream: &mut T, msg: &[u8]) -> Result<Response, error::Error>
-    where
-        T: Write + Read,
-    {
+    fn handle_stream<T: Write + Read, U: Write>(
+        &self,
+        stream: &mut T,
+        msg: &[u8],
+        writer: &mut U,
+    ) -> Result<Response, error::Error> {
         stream.write_all(msg)?;
         stream.flush()?;
 
-        let (res_head, body_start) = Self::res_head(stream)?;
-        let mut res = Response::new(&res_head)?;
+        let (res_head, body_start) = Self::read_head(stream)?;
+        let res: Response = Response::from_head(&res_head)?;
 
         if self.method != Method::HEAD {
-            let mut res_body = Vec::with_capacity(res.content_len()?);
-            stream.read_to_end(&mut res_body)?;
-            res.append_body(body_start);
-            res.append_body(res_body);
+            writer.write_all(&body_start)?;
+            io::copy(stream, writer)?;
         }
 
         Ok(res)
     }
 
-    fn res_head<T>(stream: &mut T) -> Result<(Vec<u8>, Vec<u8>), io::Error>
-    where
-        T: Write + Read,
-    {
+    fn read_head<T: Read>(stream: &mut T) -> Result<(Vec<u8>, Vec<u8>), io::Error> {
         let mut res_head = Vec::new();
         let pos;
 
         loop {
-            let mut buf = [0; 200];
+            let mut buf = [0; 10];
             let size = stream.read(&mut buf)?;
             res_head.append(&mut buf[..size].to_vec());
 
@@ -175,7 +178,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     //Creates default headers for a `Request`
-    fn default_headers<T: ToString>(host: T) -> HashMap<String, String> {
+    fn parse_default_headers<T: ToString>(host: T) -> HashMap<String, String> {
         let mut headers = HashMap::with_capacity(4);
         headers.insert("Host".to_string(), host.to_string());
         headers.insert("Connection".to_string(), "Close".to_string());
@@ -190,22 +193,26 @@ impl<'a> RequestBuilder<'a> {
     }
 
     //Opens secure connnection over TlsStream
-    fn secure_conn(&self, stream: TcpStream) -> Result<TlsStream<TcpStream>, error::Error> {
+    fn secure_conn<S: Read + Write>(&self, stream: S) -> Result<TlsStream<S>, error::Error> {
         let connector = TlsConnector::new()?;
         Ok(connector.connect(self.url.host(), stream)?)
     }
 }
 
 ///Creates and sends GET request. Returns response for that request.
-pub fn get(url: &str) -> Result<Response, error::Error> {
-    let url = url.parse::<Url>()?;
-    RequestBuilder::new(url).send()
+pub fn get<T: AsRef<str>, U: Write>(url: T, writer: &mut U) -> Result<Response, error::Error> {
+    let url = url.as_ref().parse::<Url>()?;
+    RequestBuilder::new(url).send::<TcpStream, U>(writer)
 }
 
 ///Creates and sends HEAD request. Returns response for that request.
-pub fn head(url: &str) -> Result<Response, error::Error> {
-    let url = url.parse::<Url>()?;
-    RequestBuilder::new(url).method(Method::HEAD).send()
+pub fn head<T: AsRef<str>>(url: T) -> Result<Response, error::Error> {
+    let url = url.as_ref().parse::<Url>()?;
+    let mut writer = Vec::with_capacity(200);
+
+    RequestBuilder::new(url)
+        .method(Method::HEAD)
+        .send::<TcpStream, _>(&mut writer)
 }
 
 #[cfg(test)]
@@ -271,8 +278,14 @@ mod tests {
     #[ignore]
     #[test]
     fn request_b_send() {
-        RequestBuilder::new(URL.parse().unwrap()).send().unwrap();
-        RequestBuilder::new(URL_S.parse().unwrap()).send().unwrap();
+        let mut writer = Vec::new();
+
+        RequestBuilder::new(URL.parse().unwrap())
+            .send::<TcpStream, Vec<u8>>(&mut writer)
+            .unwrap();
+        RequestBuilder::new(URL_S.parse().unwrap())
+            .send::<TcpStream, Vec<u8>>(&mut writer)
+            .unwrap();
     }
 
     #[ignore]
@@ -281,8 +294,9 @@ mod tests {
         let req = RequestBuilder::new(URL.parse().unwrap());
         let mut stream = req.connect().unwrap();
         let msg = req.parse_msg();
+        let mut writer = Vec::new();
 
-        let res = req.handle_stream(&mut stream, &msg).unwrap();
+        let res = req.handle_stream(&mut stream, &msg, &mut writer).unwrap();
 
         assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
     }
@@ -300,7 +314,7 @@ mod tests {
         headers.insert("Host".to_string(), "doc.rust-lang.org".to_string());
         headers.insert("Connection".to_string(), "Close".to_string());
 
-        assert_eq!(RequestBuilder::default_headers(url.host()), headers)
+        assert_eq!(RequestBuilder::parse_default_headers(url.host()), headers)
     }
 
     #[ignore]
@@ -322,10 +336,14 @@ mod tests {
     #[ignore]
     #[test]
     fn request_get() {
-        let res = get(URL).unwrap();
+        let mut writer = Vec::new();
+        let res = get(URL, &mut writer).unwrap();
+
         assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
 
-        let res = get(URL_S).unwrap();
+        let mut writer = Vec::with_capacity(200);
+        let res = get(URL_S, &mut writer).unwrap();
+
         assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
     }
 

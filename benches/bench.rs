@@ -8,11 +8,14 @@ use test::Bencher;
 
 #[bench]
 fn parse_response(b: &mut Bencher) {
-    let mut buf = Vec::new();
+    let mut content = Vec::new();
     let mut response = File::open("benches/res.txt").unwrap();
-    response.read_to_end(&mut buf).unwrap();
+    response.read_to_end(&mut content).unwrap();
 
-    b.iter(|| Response::try_from(&buf));
+    b.iter(|| {
+        let mut body = Vec::new();
+        Response::try_from(&content, &mut body)
+    });
 }
 
 #[bench]

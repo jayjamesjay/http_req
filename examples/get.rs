@@ -1,8 +1,10 @@
-extern crate http_req;
 use http_req::request;
 
 fn main() {
-    let res = request::get("https://doc.rust-lang.org/").unwrap();
+    let mut buffer = Vec::new();
+    let res = request::get("https://doc.rust-lang.org/", &mut buffer).unwrap();
 
     println!("Status: {} {}", res.status_code(), res.reason());
+    println!("{:?}", res.headers());
+    //println!("{}", String::from_utf8_lossy(res.body()));
 }
