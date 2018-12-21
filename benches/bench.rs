@@ -2,7 +2,7 @@
 extern crate http_req;
 extern crate test;
 
-use http_req::{response::Response, url::Url};
+use http_req::{response::Response, uri::Uri};
 use std::{fs::File, io::Read};
 use test::Bencher;
 
@@ -19,8 +19,8 @@ fn parse_response(b: &mut Bencher) {
 }
 
 #[bench]
-fn parse_url(b: &mut Bencher) {
+fn parse_uri(b: &mut Bencher) {
     const URL: &str = "https://doc.rust-lang.org/stable/std/string/struct.String.html";
 
-    b.iter(|| URL.parse::<Url>());
+    b.iter(|| URL.parse::<Uri>());
 }

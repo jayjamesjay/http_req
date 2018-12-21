@@ -6,20 +6,20 @@ pub(crate) const CR_LF_2: [u8; 4] = [13, 10, 13, 10];
 
 pub struct Response {
     status: Status,
-    headers: HashMap<String, String>,
+    headers: Headers,
 }
 
 impl Response {
     ///Creates new `Response` with head - status and headers - parsed from a slice of bytes
     pub fn from_head(head: &[u8]) -> Result<Response, Error> {
-        let (headers, status) = Self::parse_head(head)?;
+        let (status, headers) = Self::parse_head(head)?;
 
         Ok(Response { status, headers })
     }
 
     ///Parses `Response` from slice of bytes. Writes it's body to `writer`.
     pub fn try_from<T: Write>(res: &[u8], writer: &mut T) -> Result<Response, Error> {
-        if res.len() == 0 {
+        if res.is_empty() {
             return Err(Error::Parse(ParseErr::Empty));
         }
 
@@ -35,43 +35,13 @@ impl Response {
     }
 
     ///Parses head of a `Response` - status and headers - from slice of bytes.
-    pub fn parse_head(head: &[u8]) -> Result<(HashMap<String, String>, Status), ParseErr> {
-        let mut head: Vec<_> = str::from_utf8(head)?.lines().collect();
-        head.pop();
+    pub fn parse_head(head: &[u8]) -> Result<(Status, Headers), ParseErr> {
+        let mut head = str::from_utf8(head)?.splitn(2, '\n');
 
-        let status = Self::parse_status_line(&head.remove(0))?;
-        let headers = Self::parse_headers(&head)?;
+        let status = head.next().unwrap().parse()?;
+        let headers = head.next().unwrap().parse()?;
 
-        Ok((headers, status))
-    }
-
-    ///Parses status line
-    pub fn parse_status_line(status_line: &str) -> Result<Status, ParseErr> {
-        let status_line: Vec<_> = status_line.splitn(3, ' ').collect();
-
-        let version = status_line[0];
-        let code: u16 = status_line[1].parse()?;
-        let reason = status_line[2];
-
-        Ok(Status::from((version, code, reason)))
-    }
-
-    ///Parses headers
-    pub fn parse_headers(headers: &[&str]) -> Result<HashMap<String, String>, ParseErr> {
-        let correct_headers = headers.iter().all(|e| e.contains(":"));
-
-        if correct_headers {
-            Ok(headers
-                .iter()
-                .map(|elem| {
-                    let pos = elem.find(":").unwrap();
-                    let (key, value) = elem.split_at(pos);
-                    (key.to_string(), value[2..].to_string())
-                })
-                .collect())
-        } else {
-            return Err(ParseErr::Invalid);
-        }
+        Ok((status, headers))
     }
 
     ///Returns status code of this `Response`.
@@ -90,7 +60,7 @@ impl Response {
     }
 
     ///Returns headers of this `Response`.
-    pub fn headers(&self) -> &HashMap<String, String> {
+    pub fn headers(&self) -> &Headers {
         &self.headers
     }
 
@@ -124,28 +94,33 @@ impl StatusCode {
     }
 
     ///Checks if this `StatusCode` is within 100-199, which indicates that it's Informational.
-    pub fn is_info(&self) -> bool {
+    pub fn is_info(self) -> bool {
         self.0 >= 100 && self.0 < 200
     }
 
     ///Checks if this `StatusCode` is within 200-299, which indicates that it's Successful.
-    pub fn is_success(&self) -> bool {
+    pub fn is_success(self) -> bool {
         self.0 >= 200 && self.0 < 300
     }
 
     ///Checks if this `StatusCode` is within 300-399, which indicates that it's Redirection.
-    pub fn is_redirect(&self) -> bool {
+    pub fn is_redirect(self) -> bool {
         self.0 >= 300 && self.0 < 400
     }
 
     ///Checks if this `StatusCode` is within 400-499, which indicates that it's Client Error.
-    pub fn is_client_err(&self) -> bool {
+    pub fn is_client_err(self) -> bool {
         self.0 >= 400 && self.0 < 500
     }
 
     ///Checks if this `StatusCode` is within 500-599, which indicates that it's Server Error.
-    pub fn is_server_err(&self) -> bool {
+    pub fn is_server_err(self) -> bool {
         self.0 >= 500 && self.0 < 600
+    }
+
+    ///Checks this `StatusCode` using closure `f`
+    pub fn is<F: FnOnce(u16) -> bool>(self, f: F) -> bool {
+        f(self.0)
     }
 }
 
@@ -189,6 +164,66 @@ where
     }
 }
 
+impl str::FromStr for Status {
+    type Err = ParseErr;
+
+    fn from_str(status_line: &str) -> Result<Status, ParseErr> {
+        let status_line: Vec<_> = status_line.trim().splitn(3, ' ').collect();
+
+        let version = status_line[0];
+        let code: u16 = status_line[1].parse()?;
+        let reason = status_line[2];
+
+        Ok(Status::from((version, code, reason)))
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Headers(HashMap<String, String>);
+
+impl Headers {
+    ///Returns a reference to the value corresponding to the key.
+    pub fn get(&self, v: &str) -> Option<&std::string::String> {
+        self.0.get(v)
+    }
+}
+
+impl str::FromStr for Headers {
+    type Err = ParseErr;
+
+    fn from_str(s: &str) -> Result<Headers, ParseErr> {
+        let headers: Vec<_> = s.trim().lines().collect();
+        let correct_headers = headers.iter().all(|e| e.contains(':'));
+
+        if correct_headers {
+            let headers = headers
+                .iter()
+                .map(|elem| {
+                    let pos = elem.find(':').unwrap();
+                    let (key, value) = elem.split_at(pos);
+                    (key.to_string(), value[2..].to_string())
+                })
+                .collect();
+
+            Ok(Headers(headers))
+        } else {
+            Err(ParseErr::Invalid)
+        }
+    }
+}
+
+impl From<HashMap<String, String>> for Headers {
+    fn from(map: HashMap<String, String>) -> Headers {
+        Headers(map)
+    }
+}
+
+impl From<Headers> for HashMap<String, String> {
+    fn from(map: Headers) -> HashMap<String, String> {
+        map.0
+    }
+}
+
 ///Finds elements slice `e` inside slice `data`. Returns position of the end of first match.
 pub fn find_slice<T>(data: &[T], e: &[T]) -> Option<usize>
 where
@@ -207,52 +242,31 @@ where
 mod tests {
     use super::*;
 
-    //"HTTP/1.1 200 OK\r\nDate: Sat, 11 Jan 2003 02:44:04 GMT\r\nContent-Type: text/html\r\n
-    //Content-Length: 100\r\n\r\n<html>hello</html>\r\n\r\nhello"
-    const RESPONSE: [u8; 129] = [
-        72, 84, 84, 80, 47, 49, 46, 49, 32, 50, 48, 48, 32, 79, 75, 13, 10, 68, 97, 116, 101, 58,
-        32, 83, 97, 116, 44, 32, 49, 49, 32, 74, 97, 110, 32, 50, 48, 48, 51, 32, 48, 50, 58, 52,
-        52, 58, 48, 52, 32, 71, 77, 84, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 84, 121, 112,
-        101, 58, 32, 116, 101, 120, 116, 47, 104, 116, 109, 108, 13, 10, 67, 111, 110, 116, 101,
-        110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32, 49, 48, 48, 13, 10, 13, 10, 60, 104,
-        116, 109, 108, 62, 104, 101, 108, 108, 111, 60, 47, 104, 116, 109, 108, 62, 13, 10, 13, 10,
-        104, 101, 108, 108, 111,
-    ];
-
-    const RESPONSE_H: [u8; 102] = [
-        72, 84, 84, 80, 47, 49, 46, 49, 32, 50, 48, 48, 32, 79, 75, 13, 10, 68, 97, 116, 101, 58,
-        32, 83, 97, 116, 44, 32, 49, 49, 32, 74, 97, 110, 32, 50, 48, 48, 51, 32, 48, 50, 58, 52,
-        52, 58, 48, 52, 32, 71, 77, 84, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 84, 121, 112,
-        101, 58, 32, 116, 101, 120, 116, 47, 104, 116, 109, 108, 13, 10, 67, 111, 110, 116, 101,
-        110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32, 49, 48, 48, 13, 10, 13, 10,
-    ];
-
-    const BODY: [u8; 27] = [
-        60, 104, 116, 109, 108, 62, 104, 101, 108, 108, 111, 60, 47, 104, 116, 109, 108, 62, 13,
-        10, 13, 10, 104, 101, 108, 108, 111,
-    ];
+    const RESPONSE: &'static [u8; 129] = b"HTTP/1.1 200 OK\r\n\
+                                         Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+                                         Content-Type: text/html\r\n\
+                                         Content-Length: 100\r\n\r\n\
+                                         <html>hello</html>\r\n\r\nhello";
+    const RESPONSE_H: &'static [u8; 102] = b"HTTP/1.1 200 OK\r\n\
+                                           Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+                                           Content-Type: text/html\r\n\
+                                           Content-Length: 100\r\n\r\n";
+    const BODY: &'static [u8; 27] = b"<html>hello</html>\r\n\r\nhello";
 
     const STATUS_LINE: &str = "HTTP/1.1 200 OK";
     const VERSION: &str = "HTTP/1.1";
     const CODE: u16 = 200;
     const REASON: &str = "OK";
 
-    const HEADERS: [&str; 3] = [
-        "Date: Sat, 11 Jan 2003 02:44:04 GMT",
-        "Content-Type: text/html",
-        "Content-Length: 100",
-    ];
-
+    const HEADERS: &str = "Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+                           Content-Type: text/html\r\n\
+                           Content-Length: 100\r\n";
     const CODE_S: StatusCode = StatusCode(200);
 
     #[test]
-    fn u16_from_status_code() {
-        assert_eq!(u16::from(CODE_S), 200);
-    }
-
-    #[test]
-    fn status_code_from() {
-        assert_eq!(StatusCode::from(200), StatusCode(200));
+    fn status_code_new() {
+        assert_eq!(StatusCode::new(200), StatusCode(200));
+        assert_ne!(StatusCode::new(400), StatusCode(404));
     }
 
     #[test]
@@ -311,12 +325,96 @@ mod tests {
     }
 
     #[test]
+    fn status_code_is() {
+        let check = |i| i % 3 == 0;
+
+        let code_1 = StatusCode::new(200);
+        let code_2 = StatusCode::new(300);
+
+        assert!(!code_1.is(check));
+        assert!(code_2.is(check));
+    }
+
+    #[test]
+    fn status_code_from() {
+        assert_eq!(StatusCode::from(200), StatusCode(200));
+    }
+
+    #[test]
+    fn u16_from_status_code() {
+        assert_eq!(u16::from(CODE_S), 200);
+    }
+
+    #[test]
+    fn status_code_display() {
+        let code = format!("Status Code: {}", StatusCode::new(200));
+        const CODE_EXPECT: &str = "Status Code: 200";
+
+        assert_eq!(code, CODE_EXPECT);
+    }
+
+    #[test]
     fn status_from() {
         let status = Status::from((VERSION, CODE, REASON));
 
         assert_eq!(status.version, VERSION);
         assert_eq!(status.code, CODE_S);
         assert_eq!(status.reason, REASON);
+    }
+
+    #[test]
+    fn status_from_str() {
+        let status = STATUS_LINE.parse::<Status>().unwrap();
+
+        assert_eq!(status.version, VERSION);
+        assert_eq!(status.code, CODE_S);
+        assert_eq!(status.reason, REASON);
+    }
+
+    #[test]
+    fn headers_get() {
+        let mut headers = HashMap::with_capacity(2);
+        headers.insert(
+            "Date".to_string(),
+            "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
+        );
+
+        let headers = Headers::from(headers);
+
+        assert_eq!(
+            headers.get("Date"),
+            Some(&"Sat, 11 Jan 2003 02:44:04 GMT".to_string())
+        );
+    }
+
+    #[test]
+    fn headers_from_str() {
+        let mut headers_expect = HashMap::with_capacity(2);
+        headers_expect.insert(
+            "Date".to_string(),
+            "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
+        );
+        headers_expect.insert("Content-Type".to_string(), "text/html".to_string());
+        headers_expect.insert("Content-Length".to_string(), "100".to_string());
+
+        let headers = HEADERS.parse::<Headers>().unwrap();
+        assert_eq!(headers, Headers::from(headers_expect));
+    }
+
+    #[test]
+    fn headers_from() {
+        let mut headers_expect = HashMap::with_capacity(2);
+        headers_expect.insert(
+            "Date".to_string(),
+            "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
+        );
+        headers_expect.insert("Content-Type".to_string(), "text/html".to_string());
+        headers_expect.insert("Content-Length".to_string(), "100".to_string());
+
+        assert_eq!(
+            Headers(headers_expect.clone()),
+            Headers::from(headers_expect)
+        );
     }
 
     #[test]
@@ -329,15 +427,15 @@ mod tests {
 
     #[test]
     fn res_from_head() {
-        Response::from_head(&RESPONSE_H).unwrap();
+        Response::from_head(RESPONSE_H).unwrap();
     }
 
     #[test]
     fn res_try_from() {
         let mut writer = Vec::new();
 
-        Response::try_from(&RESPONSE, &mut writer).unwrap();
-        Response::try_from(&RESPONSE_H, &mut writer).unwrap();
+        Response::try_from(RESPONSE, &mut writer).unwrap();
+        Response::try_from(RESPONSE_H, &mut writer).unwrap();
     }
 
     #[test]
@@ -357,36 +455,16 @@ mod tests {
         headers.insert("Content-Type".to_string(), "text/html".to_string());
         headers.insert("Content-Length".to_string(), "100".to_string());
 
-        let head = Response::parse_head(&RESPONSE_H).unwrap();
+        let head = Response::parse_head(RESPONSE_H).unwrap();
 
-        assert_eq!(head.0, headers);
-        assert_eq!(head.1, Status::from((VERSION, CODE, REASON)));
-    }
-
-    #[test]
-    fn res_parse_status_line() {
-        let status = Response::parse_status_line(STATUS_LINE).unwrap();
-        assert_eq!(status, Status::from((VERSION, CODE, REASON)))
-    }
-
-    #[test]
-    fn res_parse_headers() {
-        let mut headers = HashMap::with_capacity(2);
-        headers.insert(
-            "Date".to_string(),
-            "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
-        );
-        headers.insert("Content-Type".to_string(), "text/html".to_string());
-        headers.insert("Content-Length".to_string(), "100".to_string());
-
-        let headers = Response::parse_headers(&HEADERS);
-        assert_eq!(headers, headers);
+        assert_eq!(head.0, Status::from((VERSION, CODE, REASON)));
+        assert_eq!(head.1, Headers::from(headers));
     }
 
     #[test]
     fn res_status_code() {
         let mut writer = Vec::new();
-        let res = Response::try_from(&RESPONSE, &mut writer).unwrap();
+        let res = Response::try_from(RESPONSE, &mut writer).unwrap();
 
         assert_eq!(res.status_code(), CODE_S);
     }
@@ -394,7 +472,7 @@ mod tests {
     #[test]
     fn res_version() {
         let mut writer = Vec::new();
-        let res = Response::try_from(&RESPONSE, &mut writer).unwrap();
+        let res = Response::try_from(RESPONSE, &mut writer).unwrap();
 
         assert_eq!(res.version(), "HTTP/1.1");
     }
@@ -402,7 +480,7 @@ mod tests {
     #[test]
     fn res_reason() {
         let mut writer = Vec::new();
-        let res = Response::try_from(&RESPONSE, &mut writer).unwrap();
+        let res = Response::try_from(RESPONSE, &mut writer).unwrap();
 
         assert_eq!(res.reason(), "OK");
     }
@@ -410,7 +488,7 @@ mod tests {
     #[test]
     fn res_headers() {
         let mut writer = Vec::new();
-        let res = Response::try_from(&RESPONSE, &mut writer).unwrap();
+        let res = Response::try_from(RESPONSE, &mut writer).unwrap();
 
         let mut headers = HashMap::with_capacity(2);
         headers.insert(
@@ -420,13 +498,13 @@ mod tests {
         headers.insert("Content-Type".to_string(), "text/html".to_string());
         headers.insert("Content-Length".to_string(), "100".to_string());
 
-        assert_eq!(res.headers(), &headers);
+        assert_eq!(res.headers(), &Headers::from(headers));
     }
 
     #[test]
     fn res_content_len() {
         let mut writer = Vec::with_capacity(101);
-        let res = Response::try_from(&RESPONSE, &mut writer).unwrap();
+        let res = Response::try_from(RESPONSE, &mut writer).unwrap();
 
         assert_eq!(res.content_len(), Ok(100));
     }
@@ -434,8 +512,8 @@ mod tests {
     #[test]
     fn res_body() {
         let mut writer = Vec::new();
-        Response::try_from(&RESPONSE, &mut writer).unwrap();
+        Response::try_from(RESPONSE, &mut writer).unwrap();
 
-        assert_eq!(writer, &BODY);
+        assert_eq!(writer, BODY);
     }
 }

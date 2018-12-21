@@ -1,13 +1,15 @@
 //! creating and sending HTTP requests
+use crate::response::CR_LF_2;
 use crate::{
     error,
     response::{self, Response},
-    url::Url,
+    uri::Uri,
 };
 use native_tls::{TlsConnector, TlsStream};
 use std::{
     collections::HashMap,
-    io::{self, Read, Write},
+    convert,
+    io::{self, BufReader, Read, Write},
     net::TcpStream,
 };
 
@@ -25,8 +27,8 @@ pub enum Method {
     PATCH,
 }
 
-impl Method {
-    fn as_str(&self) -> &'static str {
+impl convert::AsRef<str> for Method {
+    fn as_ref(&self) -> &str {
         use self::Method::*;
 
         match self {
@@ -43,7 +45,7 @@ impl Method {
 
 #[derive(Clone, Debug)]
 pub struct RequestBuilder<'a> {
-    url: Url,
+    uri: Uri,
     method: Method,
     version: &'a str,
     headers: HashMap<String, String>,
@@ -52,10 +54,10 @@ pub struct RequestBuilder<'a> {
 
 impl<'a> RequestBuilder<'a> {
     ///Creates new RequestBuilder with default parameters
-    pub fn new(url: Url) -> RequestBuilder<'a> {
+    pub fn new(uri: Uri) -> RequestBuilder<'a> {
         RequestBuilder {
-            headers: Self::parse_default_headers(url.host()),
-            url: url,
+            headers: Self::parse_default_headers(&uri.host()),
+            uri,
             method: Method::GET,
             version: HTTP_V,
             body: None,
@@ -75,7 +77,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Adds new header to existing/default headers
-    pub fn add_header<V, U>(&mut self, key: V, val: U) -> &mut Self
+    pub fn add_header<V, U>(&mut self, key: &V, val: &U) -> &mut Self
     where
         V: ToString,
         U: ToString,
@@ -100,7 +102,7 @@ impl<'a> RequestBuilder<'a> {
         let msg = self.parse_msg();
         let mut stream = self.connect()?;
 
-        if self.url.scheme() == "https" {
+        if self.uri.scheme() == "https" {
             let mut stream = self.secure_conn(stream)?;
             res = self.handle_stream(&mut stream, &msg, writer)?;
         } else {
@@ -120,43 +122,45 @@ impl<'a> RequestBuilder<'a> {
         stream.write_all(msg)?;
         stream.flush()?;
 
-        let (res_head, body_start) = Self::read_head(stream)?;
-        let res: Response = Response::from_head(&res_head)?;
+        let mut stream = BufReader::new(stream);
+
+        let res_head = Self::read_head(&mut stream)?;
+        let res = Response::from_head(&res_head)?;
 
         if self.method != Method::HEAD {
-            writer.write_all(&body_start)?;
-            io::copy(stream, writer)?;
+            io::copy(&mut stream, writer)?;
         }
 
         Ok(res)
     }
 
-    fn read_head<T: Read>(stream: &mut T) -> Result<(Vec<u8>, Vec<u8>), io::Error> {
-        let mut res_head = Vec::new();
-        let pos;
+    //Reads stream till the end of head of server's response.
+    fn read_head<T: Read>(stream: &mut T) -> Result<Vec<u8>, io::Error> {
+        let mut head = Vec::with_capacity(200);
+        let mut bytes = stream.bytes();
 
-        loop {
-            let mut buf = [0; 10];
-            let size = stream.read(&mut buf)?;
-            res_head.append(&mut buf[..size].to_vec());
+        for _ in 0..10 {
+            let item = bytes.next().unwrap()?;
+            head.push(item);
+        }
 
-            if let Some(v) = response::find_slice(&res_head, &response::CR_LF_2) {
-                pos = v;
+        for byte in bytes {
+            head.push(byte?);
+
+            if response::find_slice(&head, &CR_LF_2).is_some() {
                 break;
             }
         }
 
-        let (res_head, res_body) = res_head.split_at(pos);
-
-        Ok((res_head.to_vec(), res_body.to_vec()))
+        Ok(head)
     }
 
     ///Parses request message
     fn parse_msg(&self) -> Vec<u8> {
         let request_line = format!(
             "{} /{} {}{}",
-            self.method.as_str(),
-            self.url.resource(),
+            self.method.as_ref(),
+            self.uri.resource(),
             self.version,
             CR_LF
         );
@@ -170,15 +174,14 @@ impl<'a> RequestBuilder<'a> {
         let mut request_msg = (request_line + &headers + CR_LF).as_bytes().to_vec();
 
         if let Some(b) = &self.body {
-            let mut body = b.to_vec();
-            request_msg.append(&mut body);
+            request_msg.extend(*b);
         }
 
         request_msg
     }
 
     //Creates default headers for a `Request`
-    fn parse_default_headers<T: ToString>(host: T) -> HashMap<String, String> {
+    fn parse_default_headers<T: ToString>(host: &T) -> HashMap<String, String> {
         let mut headers = HashMap::with_capacity(4);
         headers.insert("Host".to_string(), host.to_string());
         headers.insert("Connection".to_string(), "Close".to_string());
@@ -188,29 +191,28 @@ impl<'a> RequestBuilder<'a> {
 
     //Opens a TCP connection
     fn connect(&self) -> Result<TcpStream, io::Error> {
-        let addr = format!("{}:{}", self.url.host(), self.url.port());
-        TcpStream::connect(addr)
+        TcpStream::connect((self.uri.host(), self.uri.port()))
     }
 
     //Opens secure connnection over TlsStream
     fn secure_conn<S: Read + Write>(&self, stream: S) -> Result<TlsStream<S>, error::Error> {
         let connector = TlsConnector::new()?;
-        Ok(connector.connect(self.url.host(), stream)?)
+        Ok(connector.connect(self.uri.host(), stream)?)
     }
 }
 
 ///Creates and sends GET request. Returns response for that request.
-pub fn get<T: AsRef<str>, U: Write>(url: T, writer: &mut U) -> Result<Response, error::Error> {
-    let url = url.as_ref().parse::<Url>()?;
-    RequestBuilder::new(url).send::<TcpStream, U>(writer)
+pub fn get<T: AsRef<str>, U: Write>(uri: T, writer: &mut U) -> Result<Response, error::Error> {
+    let uri = uri.as_ref().parse::<Uri>()?;
+    RequestBuilder::new(uri).send::<TcpStream, U>(writer)
 }
 
 ///Creates and sends HEAD request. Returns response for that request.
-pub fn head<T: AsRef<str>>(url: T) -> Result<Response, error::Error> {
-    let url = url.as_ref().parse::<Url>()?;
-    let mut writer = Vec::with_capacity(200);
+pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
+    let uri = uri.as_ref().parse::<Uri>()?;
+    let mut writer = Vec::new();
 
-    RequestBuilder::new(url)
+    RequestBuilder::new(uri)
         .method(Method::HEAD)
         .send::<TcpStream, _>(&mut writer)
 }
@@ -239,13 +241,13 @@ mod tests {
 
     #[test]
     fn request_b_set_headers() {
-        let mut req = RequestBuilder::new(URL.parse().unwrap());
         let mut headers = HashMap::with_capacity(4);
         headers.insert("Accept-Charset".to_string(), "utf-8".to_string());
         headers.insert("Accept-Language".to_string(), "en-US".to_string());
         headers.insert("Host".to_string(), "doc.rust-lang.org".to_string());
         headers.insert("Connection".to_string(), "Close".to_string());
 
+        let mut req = RequestBuilder::new(URL.parse().unwrap());
         let req = req.set_headers(headers.clone());
 
         assert_eq!(req.headers, headers);
@@ -262,7 +264,7 @@ mod tests {
         expect_headers.insert("Connection".to_string(), "Close".to_string());
         expect_headers.insert(k.to_string(), v.to_string());
 
-        let req = req.add_header(k, v);
+        let req = req.add_header(&k, &v);
 
         assert_eq!(req.headers, expect_headers);
     }
@@ -297,24 +299,28 @@ mod tests {
         let mut writer = Vec::new();
 
         let res = req.handle_stream(&mut stream, &msg, &mut writer).unwrap();
-
         assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
     }
 
+    #[ignore]
     #[test]
     fn request_b_msg() {
         let req = RequestBuilder::new(URL.parse().unwrap());
-        req.parse_msg();
+        const DEFAULT_MSG: &'static [u8] = b"GET /std/string/index.html HTTP/1.1\r\n\
+                                             Connection: Close\r\n\
+                                             Host: doc.rust-lang.org\r\n\r\n";
+
+        assert_eq!(req.parse_msg(), DEFAULT_MSG);
     }
 
     #[test]
     fn request_b_default_headers() {
-        let url = URL.parse::<Url>().unwrap();
+        let uri = URL.parse::<Uri>().unwrap();
         let mut headers = HashMap::new();
         headers.insert("Host".to_string(), "doc.rust-lang.org".to_string());
         headers.insert("Connection".to_string(), "Close".to_string());
 
-        assert_eq!(RequestBuilder::parse_default_headers(url.host()), headers)
+        assert_eq!(RequestBuilder::parse_default_headers(&uri.host()), headers)
     }
 
     #[ignore]
