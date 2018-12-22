@@ -1,6 +1,11 @@
 //! parsing server response
 use crate::error::{Error, ParseErr};
-use std::{collections::HashMap, fmt, io::Write, str};
+use std::{
+    collections::{hash_map, HashMap},
+    fmt,
+    io::Write,
+    str,
+};
 
 pub(crate) const CR_LF_2: [u8; 4] = [13, 10, 13, 10];
 
@@ -178,13 +183,46 @@ impl str::FromStr for Status {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Default)]
+///Wrapper around HashMap<String, String> with additional functionality for parsing HTTP headers
 pub struct Headers(HashMap<String, String>);
 
 impl Headers {
+    ///Creates an empty `Headers`.
+    ///
+    ///The headers are initially created with a capacity of 0, so they will not allocate until
+    ///it is first inserted into.
+    pub fn new() -> Headers {
+        Headers(HashMap::new())
+    }
+
+    ///Creates empty `Headers` with the specified capacity.
+    ///
+    ///The headers will be able to hold at least capacity elements without reallocating.
+    ///If capacity is 0, the headers will not allocate.
+    pub fn with_capacity(capacity: usize) -> Headers {
+        Headers(HashMap::with_capacity(capacity))
+    }
+
+    ///An iterator visiting all key-value pairs in arbitrary order.
+    ///The iterator element type is (&String, &String).
+    pub fn iter(&self) -> hash_map::Iter<String, String> {
+        self.0.iter()
+    }
+
     ///Returns a reference to the value corresponding to the key.
     pub fn get(&self, v: &str) -> Option<&std::string::String> {
         self.0.get(v)
+    }
+
+    ///Inserts a key-value pair into the headers.
+    ///
+    ///If the headers did not have this key present, None is returned.
+    ///
+    ///If the headers did have this key present, the value is updated, and the old value is returned.
+    ///The key is not updated, though; this matters for types that can be == without being identical.
+    pub fn insert<T: ToString, U: ToString>(&mut self, key: &T, val: &U) {
+        self.0.insert(key.to_string(), val.to_string());
     }
 }
 
@@ -373,13 +411,8 @@ mod tests {
 
     #[test]
     fn headers_get() {
-        let mut headers = HashMap::with_capacity(2);
-        headers.insert(
-            "Date".to_string(),
-            "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
-        );
-
-        let headers = Headers::from(headers);
+        let mut headers = Headers::with_capacity(2);
+        headers.insert(&"Date", &"Sat, 11 Jan 2003 02:44:04 GMT");
 
         assert_eq!(
             headers.get("Date"),
@@ -447,13 +480,10 @@ mod tests {
 
     #[test]
     fn res_parse_head() {
-        let mut headers = HashMap::with_capacity(2);
-        headers.insert(
-            "Date".to_string(),
-            "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
-        );
-        headers.insert("Content-Type".to_string(), "text/html".to_string());
-        headers.insert("Content-Length".to_string(), "100".to_string());
+        let mut headers = Headers::with_capacity(4);
+        headers.insert(&"Date", &"Sat, 11 Jan 2003 02:44:04 GMT");
+        headers.insert(&"Content-Type", &"text/html");
+        headers.insert(&"Content-Length", &"100");
 
         let head = Response::parse_head(RESPONSE_H).unwrap();
 
@@ -490,13 +520,10 @@ mod tests {
         let mut writer = Vec::new();
         let res = Response::try_from(RESPONSE, &mut writer).unwrap();
 
-        let mut headers = HashMap::with_capacity(2);
-        headers.insert(
-            "Date".to_string(),
-            "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
-        );
-        headers.insert("Content-Type".to_string(), "text/html".to_string());
-        headers.insert("Content-Length".to_string(), "100".to_string());
+        let mut headers = Headers::with_capacity(2);
+        headers.insert(&"Date", &"Sat, 11 Jan 2003 02:44:04 GMT");
+        headers.insert(&"Content-Type", &"text/html");
+        headers.insert(&"Content-Length", &"100");
 
         assert_eq!(res.headers(), &Headers::from(headers));
     }

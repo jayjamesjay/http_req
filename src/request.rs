@@ -1,13 +1,11 @@
 //! creating and sending HTTP requests
-use crate::response::CR_LF_2;
 use crate::{
     error,
-    response::{self, Response},
+    response::{self, Headers, Response, CR_LF_2},
     uri::Uri,
 };
 use native_tls::{TlsConnector, TlsStream};
 use std::{
-    collections::HashMap,
     convert,
     io::{self, BufReader, Read, Write},
     net::TcpStream,
@@ -48,7 +46,7 @@ pub struct RequestBuilder<'a> {
     uri: Uri,
     method: Method,
     version: &'a str,
-    headers: HashMap<String, String>,
+    headers: Headers,
     body: Option<&'a [u8]>,
 }
 
@@ -71,18 +69,21 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Replaces all it's headers with headers passed to the function
-    pub fn set_headers(&mut self, headers: HashMap<String, String>) -> &mut Self {
-        self.headers = headers;
+    pub fn set_headers<T>(&mut self, headers: T) -> &mut Self
+    where
+        Headers: From<T>,
+    {
+        self.headers = Headers::from(headers);
         self
     }
 
     ///Adds new header to existing/default headers
-    pub fn add_header<V, U>(&mut self, key: &V, val: &U) -> &mut Self
+    pub fn add_header<T, U>(&mut self, key: &T, val: &U) -> &mut Self
     where
-        V: ToString,
+        T: ToString,
         U: ToString,
     {
-        self.headers.insert(key.to_string(), val.to_string());
+        self.headers.insert(key, val);
         self
     }
 
@@ -181,10 +182,10 @@ impl<'a> RequestBuilder<'a> {
     }
 
     //Creates default headers for a `Request`
-    fn parse_default_headers<T: ToString>(host: &T) -> HashMap<String, String> {
-        let mut headers = HashMap::with_capacity(4);
-        headers.insert("Host".to_string(), host.to_string());
-        headers.insert("Connection".to_string(), "Close".to_string());
+    fn parse_default_headers<T: ToString>(host: &T) -> Headers {
+        let mut headers = Headers::with_capacity(4);
+        headers.insert(&"Host", host);
+        headers.insert(&"Connection", &"Close");
 
         headers
     }
@@ -241,11 +242,11 @@ mod tests {
 
     #[test]
     fn request_b_set_headers() {
-        let mut headers = HashMap::with_capacity(4);
-        headers.insert("Accept-Charset".to_string(), "utf-8".to_string());
-        headers.insert("Accept-Language".to_string(), "en-US".to_string());
-        headers.insert("Host".to_string(), "doc.rust-lang.org".to_string());
-        headers.insert("Connection".to_string(), "Close".to_string());
+        let mut headers = Headers::new();
+        headers.insert(&"Accept-Charset", &"utf-8");
+        headers.insert(&"Accept-Language", &"en-US");
+        headers.insert(&"Host", &"doc.rust-lang.org");
+        headers.insert(&"Connection", &"Close");
 
         let mut req = RequestBuilder::new(URL.parse().unwrap());
         let req = req.set_headers(headers.clone());
@@ -259,10 +260,10 @@ mod tests {
         let k = "Accept-Charset";
         let v = "utf-8";
 
-        let mut expect_headers = HashMap::with_capacity(3);
-        expect_headers.insert("Host".to_string(), "doc.rust-lang.org".to_string());
-        expect_headers.insert("Connection".to_string(), "Close".to_string());
-        expect_headers.insert(k.to_string(), v.to_string());
+        let mut expect_headers = Headers::new();
+        expect_headers.insert(&"Host", &"doc.rust-lang.org");
+        expect_headers.insert(&"Connection", &"Close");
+        expect_headers.insert(&k, &v);
 
         let req = req.add_header(&k, &v);
 
@@ -316,9 +317,9 @@ mod tests {
     #[test]
     fn request_b_default_headers() {
         let uri = URL.parse::<Uri>().unwrap();
-        let mut headers = HashMap::new();
-        headers.insert("Host".to_string(), "doc.rust-lang.org".to_string());
-        headers.insert("Connection".to_string(), "Close".to_string());
+        let mut headers = Headers::with_capacity(4);
+        headers.insert(&"Host", &"doc.rust-lang.org");
+        headers.insert(&"Connection", &"Close");
 
         assert_eq!(RequestBuilder::parse_default_headers(&uri.host()), headers)
     }
