@@ -1,6 +1,6 @@
 //! uri operations
 use crate::error::{Error, ParseErr};
-use std::str;
+use std::{fmt, str};
 
 const HTTP_PORT: u16 = 80;
 const HTTPS_PORT: u16 = 443;
@@ -51,13 +51,13 @@ impl Uri {
 
     ///Returs port of this `Uri`. If it hasn't been set in the parsed Uri, returns default port.
     pub fn port(&self) -> u16 {
-        let default_port = match self.scheme.as_ref() {
+        let default_port = match self.scheme() {
             "https" => HTTPS_PORT,
             _ => HTTP_PORT,
         };
 
         match self.authority {
-            Some(ref a) => a.port.unwrap_or(default_port),
+            Some(ref a) => a.port().unwrap_or(default_port),
             None => default_port,
         }
     }
@@ -79,13 +79,28 @@ impl Uri {
 
     ///Returs resource `Uri` points to.
     pub fn resource(&self) -> String {
-        let path = self.path().to_string();
+        let mut path = self.path().to_string();
 
-        if self.query().is_empty() {
-            path
-        } else {
-            path + "?" + self.query()
+        if !self.query().is_empty() {
+            path = path + "?" + self.query();
         }
+
+        if !self.fragment().is_empty() {
+            path + "#" + self.fragment()
+        } else {
+            path
+        }
+    }
+}
+
+impl fmt::Display for Uri {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let authority = match self.authority {
+            Some(ref a) => format!("//{}", a),
+            None => "".to_string(),
+        };
+
+        write!(f, "{}:{}{}", self.scheme(), authority, self.resource())
     }
 }
 
@@ -102,7 +117,7 @@ impl str::FromStr for Uri {
         let mut authority = None;
         if let Some(u) = uri_part.clone() {
             if u.contains("//") {
-                let (auth, part) = get_chunks(&u[2..], "/");
+                let (auth, mut part) = get_chunks(&u[2..], "/");
 
                 authority = match auth {
                     Some(a) => match a.parse::<Authority>() {
@@ -112,7 +127,10 @@ impl str::FromStr for Uri {
                     None => None,
                 };
 
-                uri_part = part;
+                uri_part = match part.as_mut() {
+                    Some(ref v) => Some(format!("/{}", v)),
+                    None => None,
+                };
             }
         }
 
@@ -130,10 +148,27 @@ impl str::FromStr for Uri {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct Authority {
+pub struct Authority {
     user_info: Option<String>,
     host: Option<String>,
     port: Option<u16>,
+}
+
+impl Authority {
+    ///Returns information about the user
+    pub fn user_info(&self) -> &Option<String> {
+        &self.user_info
+    }
+
+    ///Returns host
+    pub fn host(&self) -> &Option<String> {
+        &self.host
+    }
+
+    ///Returns port
+    pub fn port(&self) -> &Option<u16> {
+        &self.port
+    }
 }
 
 impl str::FromStr for Authority {
@@ -165,6 +200,24 @@ impl str::FromStr for Authority {
             host,
             port,
         })
+    }
+}
+
+impl fmt::Display for Authority {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let user_info = match self.user_info {
+            Some(ref u) => format!("{}@", u),
+            None => "".to_string(),
+        };
+
+        let host = self.host().ref_or("");
+
+        let port = match self.port() {
+            Some(ref p) => format!(":{}", p),
+            None => "".to_string(),
+        };
+
+        write!(f, "{}{}{}", user_info, host, port)
     }
 }
 
@@ -212,11 +265,17 @@ fn get_chunks(s: &str, separator: &str) -> (Option<String>, Option<String>) {
 mod tests {
     use super::*;
 
-    const TEST_URLS: [&str; 4] = [
+    const TEST_URIS: [&str; 4] = [
         "https://user:info@foo.com:12/bar/baz?query#fragment",
         "file:///C:/Users/User/Pictures/screenshot.png",
         "https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol",
         "mailto:John.Doe@example.com",
+    ];
+
+    const TEST_AUTH: [&str; 3] = [
+        "user:info@foo.com:12",
+        "en.wikipedia.org",
+        "John.Doe@example.com",
     ];
 
     #[test]
@@ -229,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn full_parse() {
+    fn uri_full_parse() {
         let uri = "abc://username:password@example.com:123/path/data?key=value&key2=value2#fragid1"
             .parse::<Uri>()
             .unwrap();
@@ -239,21 +298,21 @@ mod tests {
         assert_eq!(uri.host(), "example.com");
         assert_eq!(uri.port(), 123);
 
-        assert_eq!(uri.path(), "path/data");
+        assert_eq!(uri.path(), "/path/data");
         assert_eq!(uri.query(), "key=value&key2=value2");
         assert_eq!(uri.fragment(), "fragid1");
     }
 
     #[test]
-    fn parse_uri() {
-        for uri in TEST_URLS.iter() {
+    fn uri_parse() {
+        for uri in TEST_URIS.iter() {
             uri.parse::<Uri>().unwrap();
         }
     }
 
     #[test]
-    fn scheme_uri() {
-        let uris: Vec<_> = TEST_URLS
+    fn uri_scheme() {
+        let uris: Vec<_> = TEST_URIS
             .iter()
             .map(|uri| uri.parse::<Uri>().unwrap())
             .collect();
@@ -265,8 +324,8 @@ mod tests {
     }
 
     #[test]
-    fn uesr_info_uri() {
-        let uris: Vec<_> = TEST_URLS
+    fn uri_uesr_info() {
+        let uris: Vec<_> = TEST_URIS
             .iter()
             .map(|uri| uri.parse::<Uri>().unwrap())
             .collect();
@@ -278,8 +337,8 @@ mod tests {
     }
 
     #[test]
-    fn host_uri() {
-        let uris: Vec<_> = TEST_URLS
+    fn uri_host() {
+        let uris: Vec<_> = TEST_URIS
             .iter()
             .map(|uri| uri.parse::<Uri>().unwrap())
             .collect();
@@ -291,8 +350,8 @@ mod tests {
     }
 
     #[test]
-    fn port_uri() {
-        let uris: Vec<_> = TEST_URLS
+    fn uri_port() {
+        let uris: Vec<_> = TEST_URIS
             .iter()
             .map(|uri| uri.parse::<Uri>().unwrap())
             .collect();
@@ -304,54 +363,82 @@ mod tests {
     }
 
     #[test]
-    fn path_uri() {
-        let uris: Vec<_> = TEST_URLS
+    fn uri_path() {
+        let uris: Vec<_> = TEST_URIS
             .iter()
             .map(|uri| uri.parse::<Uri>().unwrap())
             .collect();
 
-        assert_eq!(uris[0].path(), "bar/baz");
-        assert_eq!(uris[1].path(), "C:/Users/User/Pictures/screenshot.png");
-        assert_eq!(uris[2].path(), "wiki/Hypertext_Transfer_Protocol");
+        assert_eq!(uris[0].path(), "/bar/baz");
+        assert_eq!(uris[1].path(), "/C:/Users/User/Pictures/screenshot.png");
+        assert_eq!(uris[2].path(), "/wiki/Hypertext_Transfer_Protocol");
         assert_eq!(uris[3].path(), "John.Doe@example.com");
     }
 
     #[test]
-    fn query_uri() {
-        let uris: Vec<_> = TEST_URLS
+    fn uri_query() {
+        let uris: Vec<_> = TEST_URIS
             .iter()
             .map(|uri| uri.parse::<Uri>().unwrap())
             .collect();
 
         assert_eq!(uris[0].query(), "query");
-        assert_eq!(uris[1].query(), "");
-        assert_eq!(uris[2].query(), "");
-        assert_eq!(uris[3].query(), "");
+
+        for i in 1..3 {
+            assert_eq!(uris[i].query(), "");
+        }
     }
 
     #[test]
-    fn fragment_uri() {
-        let uris: Vec<_> = TEST_URLS
+    fn uri_fragment() {
+        let uris: Vec<_> = TEST_URIS
             .iter()
             .map(|uri| uri.parse::<Uri>().unwrap())
             .collect();
 
         assert_eq!(uris[0].fragment(), "fragment");
-        assert_eq!(uris[1].fragment(), "");
-        assert_eq!(uris[2].fragment(), "");
-        assert_eq!(uris[3].fragment(), "");
+
+        for i in 1..3 {
+            assert_eq!(uris[i].fragment(), "");
+        }
     }
 
     #[test]
-    fn resource_uri() {
-        let uris: Vec<_> = TEST_URLS
+    fn uri_resource() {
+        let uris: Vec<_> = TEST_URIS
             .iter()
             .map(|uri| uri.parse::<Uri>().unwrap())
             .collect();
 
-        assert_eq!(uris[0].resource(), "bar/baz?query");
-        assert_eq!(uris[1].resource(), "C:/Users/User/Pictures/screenshot.png");
-        assert_eq!(uris[2].resource(), "wiki/Hypertext_Transfer_Protocol");
+        assert_eq!(uris[0].resource(), "/bar/baz?query#fragment");
+        assert_eq!(uris[1].resource(), "/C:/Users/User/Pictures/screenshot.png");
+        assert_eq!(uris[2].resource(), "/wiki/Hypertext_Transfer_Protocol");
         assert_eq!(uris[3].resource(), "John.Doe@example.com");
+    }
+
+    #[test]
+    fn uri_display() {
+        let uris: Vec<_> = TEST_URIS
+            .iter()
+            .map(|uri| uri.parse::<Uri>().unwrap())
+            .collect();
+
+        for i in 0..uris.len() {
+            let s = uris[i].to_string();
+            assert_eq!(s, TEST_URIS[i]);
+        }
+    }
+
+    #[test]
+    fn authority_display() {
+        let auths: Vec<_> = TEST_AUTH
+            .iter()
+            .map(|auth| auth.parse::<Authority>().unwrap())
+            .collect();
+
+        for i in 0..auths.len() {
+            let s = auths[i].to_string();
+            assert_eq!(s, TEST_AUTH[i]);
+        }
     }
 }

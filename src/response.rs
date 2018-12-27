@@ -1,5 +1,8 @@
 //! parsing server response
-use crate::error::{Error, ParseErr};
+use crate::{
+    error::{Error, ParseErr},
+    uri::Uri,
+};
 use std::{
     collections::{hash_map, HashMap},
     fmt,
@@ -221,8 +224,22 @@ impl Headers {
     ///
     ///If the headers did have this key present, the value is updated, and the old value is returned.
     ///The key is not updated, though; this matters for types that can be == without being identical.
-    pub fn insert<T: ToString, U: ToString>(&mut self, key: &T, val: &U) {
+    pub fn insert<T, U>(&mut self, key: &T, val: &U)
+    where
+        T: ToString + ?Sized,
+        U: ToString + ?Sized,
+    {
         self.0.insert(key.to_string(), val.to_string());
+    }
+
+    ///Creates default headers for a HTTP request
+    pub fn default_http(uri: &Uri) -> Headers {
+        let mut headers = Headers::with_capacity(4);
+
+        headers.insert("Host", uri.host());
+        headers.insert("Referer", uri);
+
+        headers
     }
 }
 
@@ -231,15 +248,13 @@ impl str::FromStr for Headers {
 
     fn from_str(s: &str) -> Result<Headers, ParseErr> {
         let headers: Vec<_> = s.trim().lines().collect();
-        let correct_headers = headers.iter().all(|e| e.contains(':'));
 
-        if correct_headers {
+        if headers.iter().all(|e| e.contains(':')) {
             let headers = headers
                 .iter()
-                .map(|elem| {
-                    let pos = elem.find(':').unwrap();
-                    let (key, value) = elem.split_at(pos);
-                    (key.to_string(), value[2..].to_string())
+                .map(|&elem| {
+                    let elem: Vec<_> = elem.splitn(2, ": ").collect();
+                    (elem[0].to_string(), elem[1].to_string())
                 })
                 .collect();
 
@@ -410,14 +425,44 @@ mod tests {
     }
 
     #[test]
+    fn headers_new() {
+        assert_eq!(Headers::new(), Headers(HashMap::new()));
+    }
+
+    #[test]
     fn headers_get() {
         let mut headers = Headers::with_capacity(2);
-        headers.insert(&"Date", &"Sat, 11 Jan 2003 02:44:04 GMT");
+        headers.insert("Date", "Sat, 11 Jan 2003 02:44:04 GMT");
 
         assert_eq!(
             headers.get("Date"),
             Some(&"Sat, 11 Jan 2003 02:44:04 GMT".to_string())
         );
+    }
+
+    #[test]
+    fn headers_insert() {
+        let mut headers_expect = HashMap::new();
+        headers_expect.insert("Connection".to_string(), "Close".to_string());
+        let headers_expect = Headers(headers_expect);
+
+        let mut headers = Headers::new();
+        headers.insert("Connection", "Close");
+
+        assert_eq!(headers_expect, headers);
+    }
+
+    #[test]
+    fn headers_default_http() {
+        let uri = "http://doc.rust-lang.org/std/string/index.html"
+            .parse()
+            .unwrap();
+
+        let mut headers = Headers::with_capacity(4);
+        headers.insert("Host", "doc.rust-lang.org");
+        headers.insert("Referer", "http://doc.rust-lang.org/std/string/index.html");
+
+        assert_eq!(Headers::default_http(&uri), headers);
     }
 
     #[test]
@@ -436,7 +481,7 @@ mod tests {
 
     #[test]
     fn headers_from() {
-        let mut headers_expect = HashMap::with_capacity(2);
+        let mut headers_expect = HashMap::with_capacity(4);
         headers_expect.insert(
             "Date".to_string(),
             "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
@@ -451,7 +496,25 @@ mod tests {
     }
 
     #[test]
-    fn elements_find() {
+    fn hash_map_from_headers() {
+        let mut headers = Headers::with_capacity(4);
+        headers.insert("Date", "Sat, 11 Jan 2003 02:44:04 GMT");
+        headers.insert("Content-Type", "text/html");
+        headers.insert("Content-Length", "100");
+
+        let mut headers_expect = HashMap::with_capacity(4);
+        headers_expect.insert(
+            "Date".to_string(),
+            "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
+        );
+        headers_expect.insert("Content-Type".to_string(), "text/html".to_string());
+        headers_expect.insert("Content-Length".to_string(), "100".to_string());
+
+        assert_eq!(HashMap::from(headers), headers_expect);
+    }
+
+    #[test]
+    fn find_slice_e() {
         const WORDS: [&str; 8] = ["Good", "job", "Great", "work", "Have", "fun", "See", "you"];
         const SEARCH: [&str; 3] = ["Great", "work", "Have"];
 
@@ -481,9 +544,9 @@ mod tests {
     #[test]
     fn res_parse_head() {
         let mut headers = Headers::with_capacity(4);
-        headers.insert(&"Date", &"Sat, 11 Jan 2003 02:44:04 GMT");
-        headers.insert(&"Content-Type", &"text/html");
-        headers.insert(&"Content-Length", &"100");
+        headers.insert("Date", "Sat, 11 Jan 2003 02:44:04 GMT");
+        headers.insert("Content-Type", "text/html");
+        headers.insert("Content-Length", "100");
 
         let head = Response::parse_head(RESPONSE_H).unwrap();
 
@@ -521,9 +584,9 @@ mod tests {
         let res = Response::try_from(RESPONSE, &mut writer).unwrap();
 
         let mut headers = Headers::with_capacity(2);
-        headers.insert(&"Date", &"Sat, 11 Jan 2003 02:44:04 GMT");
-        headers.insert(&"Content-Type", &"text/html");
-        headers.insert(&"Content-Length", &"100");
+        headers.insert("Date", "Sat, 11 Jan 2003 02:44:04 GMT");
+        headers.insert("Content-Type", "text/html");
+        headers.insert("Content-Length", "100");
 
         assert_eq!(res.headers(), &Headers::from(headers));
     }
