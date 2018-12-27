@@ -12,6 +12,7 @@ use std::{
 
 pub(crate) const CR_LF_2: [u8; 4] = [13, 10, 13, 10];
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct Response {
     status: Status,
     headers: Headers,
@@ -28,26 +29,26 @@ impl Response {
     ///Parses `Response` from slice of bytes. Writes it's body to `writer`.
     pub fn try_from<T: Write>(res: &[u8], writer: &mut T) -> Result<Response, Error> {
         if res.is_empty() {
-            return Err(Error::Parse(ParseErr::Empty));
+            Err(Error::Parse(ParseErr::Empty))
+        } else {
+            let mut pos = res.len();
+            if let Some(v) = find_slice(res, &CR_LF_2) {
+                pos = v;
+            }
+
+            let response = Self::from_head(&res[..pos])?;
+            writer.write_all(&res[pos..])?;
+
+            Ok(response)
         }
-
-        let mut pos = res.len();
-        if let Some(v) = find_slice(res, &CR_LF_2) {
-            pos = v;
-        }
-
-        let response = Self::from_head(&res[..pos])?;
-        writer.write_all(&res[pos..])?;
-
-        Ok(response)
     }
 
     ///Parses head of a `Response` - status and headers - from slice of bytes.
     pub fn parse_head(head: &[u8]) -> Result<(Status, Headers), ParseErr> {
         let mut head = str::from_utf8(head)?.splitn(2, '\n');
 
-        let status = head.next().unwrap().parse()?;
-        let headers = head.next().unwrap().parse()?;
+        let status = head.next().ok_or(ParseErr::Invalid)?.parse()?;
+        let headers = head.next().ok_or(ParseErr::Invalid)?.parse()?;
 
         Ok((status, headers))
     }
@@ -79,6 +80,134 @@ impl Response {
             Some(p) => Ok(p.parse()?),
             None => Ok(0),
         }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct Status {
+    version: String,
+    code: StatusCode,
+    reason: String,
+}
+
+impl<T, U, V> From<(T, U, V)> for Status
+where
+    T: ToString,
+    V: ToString,
+    StatusCode: From<U>,
+{
+    fn from(status: (T, U, V)) -> Status {
+        Status {
+            version: status.0.to_string(),
+            code: StatusCode::from(status.1),
+            reason: status.2.to_string(),
+        }
+    }
+}
+
+impl str::FromStr for Status {
+    type Err = ParseErr;
+
+    fn from_str(status_line: &str) -> Result<Status, Self::Err> {
+        let mut status_line = status_line.trim().splitn(3, ' ');
+
+        let version = status_line.next().ok_or(ParseErr::Invalid)?;
+        let code: u16 = status_line.next().ok_or(ParseErr::Invalid)?.parse()?;
+        let reason = status_line.next().ok_or(ParseErr::Invalid)?;
+
+        Ok(Status::from((version, code, reason)))
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Default)]
+///Wrapper around HashMap<String, String> with additional functionality for parsing HTTP headers
+pub struct Headers(HashMap<String, String>);
+
+impl Headers {
+    ///Creates an empty `Headers`.
+    ///
+    ///The headers are initially created with a capacity of 0, so they will not allocate until
+    ///it is first inserted into.
+    pub fn new() -> Headers {
+        Headers(HashMap::new())
+    }
+
+    ///Creates empty `Headers` with the specified capacity.
+    ///
+    ///The headers will be able to hold at least capacity elements without reallocating.
+    ///If capacity is 0, the headers will not allocate.
+    pub fn with_capacity(capacity: usize) -> Headers {
+        Headers(HashMap::with_capacity(capacity))
+    }
+
+    ///An iterator visiting all key-value pairs in arbitrary order.
+    ///The iterator element type is (&String, &String).
+    pub fn iter(&self) -> hash_map::Iter<String, String> {
+        self.0.iter()
+    }
+
+    ///Returns a reference to the value corresponding to the key.
+    pub fn get(&self, v: &str) -> Option<&std::string::String> {
+        self.0.get(v)
+    }
+
+    ///Inserts a key-value pair into the headers.
+    ///
+    ///If the headers did not have this key present, None is returned.
+    ///
+    ///If the headers did have this key present, the value is updated, and the old value is returned.
+    ///The key is not updated, though; this matters for types that can be == without being identical.
+    pub fn insert<T, U>(&mut self, key: &T, val: &U) -> Option<String>
+    where
+        T: ToString + ?Sized,
+        U: ToString + ?Sized,
+    {
+        self.0.insert(key.to_string(), val.to_string())
+    }
+
+    ///Creates default headers for a HTTP request
+    pub fn default_http(uri: &Uri) -> Headers {
+        let mut headers = Headers::with_capacity(4);
+
+        headers.insert("Host", uri.host());
+        headers.insert("Referer", uri);
+
+        headers
+    }
+}
+
+impl str::FromStr for Headers {
+    type Err = ParseErr;
+
+    fn from_str(s: &str) -> Result<Headers, ParseErr> {
+        let headers = s.trim();
+
+        if headers.lines().all(|e| e.contains(':')) {
+            let headers = headers
+                .lines()
+                .map(|elem| {
+                    let idx = elem.find(": ").unwrap();
+                    let (key, value) = elem.split_at(idx);
+                    (key.to_string(), value[2..].to_string())
+                })
+                .collect();
+
+            Ok(Headers(headers))
+        } else {
+            Err(ParseErr::Invalid)
+        }
+    }
+}
+
+impl From<HashMap<String, String>> for Headers {
+    fn from(map: HashMap<String, String>) -> Headers {
+        Headers(map)
+    }
+}
+
+impl From<Headers> for HashMap<String, String> {
+    fn from(map: Headers) -> HashMap<String, String> {
+        map.0
     }
 }
 
@@ -147,133 +276,6 @@ impl From<u16> for StatusCode {
 impl fmt::Display for StatusCode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-#[derive(PartialEq, Debug)]
-pub struct Status {
-    version: String,
-    code: StatusCode,
-    reason: String,
-}
-
-impl<T, U, V> From<(T, U, V)> for Status
-where
-    T: ToString,
-    V: ToString,
-    StatusCode: From<U>,
-{
-    fn from(status: (T, U, V)) -> Status {
-        Status {
-            version: status.0.to_string(),
-            code: StatusCode::from(status.1),
-            reason: status.2.to_string(),
-        }
-    }
-}
-
-impl str::FromStr for Status {
-    type Err = ParseErr;
-
-    fn from_str(status_line: &str) -> Result<Status, ParseErr> {
-        let status_line: Vec<_> = status_line.trim().splitn(3, ' ').collect();
-
-        let version = status_line[0];
-        let code: u16 = status_line[1].parse()?;
-        let reason = status_line[2];
-
-        Ok(Status::from((version, code, reason)))
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Default)]
-///Wrapper around HashMap<String, String> with additional functionality for parsing HTTP headers
-pub struct Headers(HashMap<String, String>);
-
-impl Headers {
-    ///Creates an empty `Headers`.
-    ///
-    ///The headers are initially created with a capacity of 0, so they will not allocate until
-    ///it is first inserted into.
-    pub fn new() -> Headers {
-        Headers(HashMap::new())
-    }
-
-    ///Creates empty `Headers` with the specified capacity.
-    ///
-    ///The headers will be able to hold at least capacity elements without reallocating.
-    ///If capacity is 0, the headers will not allocate.
-    pub fn with_capacity(capacity: usize) -> Headers {
-        Headers(HashMap::with_capacity(capacity))
-    }
-
-    ///An iterator visiting all key-value pairs in arbitrary order.
-    ///The iterator element type is (&String, &String).
-    pub fn iter(&self) -> hash_map::Iter<String, String> {
-        self.0.iter()
-    }
-
-    ///Returns a reference to the value corresponding to the key.
-    pub fn get(&self, v: &str) -> Option<&std::string::String> {
-        self.0.get(v)
-    }
-
-    ///Inserts a key-value pair into the headers.
-    ///
-    ///If the headers did not have this key present, None is returned.
-    ///
-    ///If the headers did have this key present, the value is updated, and the old value is returned.
-    ///The key is not updated, though; this matters for types that can be == without being identical.
-    pub fn insert<T, U>(&mut self, key: &T, val: &U)
-    where
-        T: ToString + ?Sized,
-        U: ToString + ?Sized,
-    {
-        self.0.insert(key.to_string(), val.to_string());
-    }
-
-    ///Creates default headers for a HTTP request
-    pub fn default_http(uri: &Uri) -> Headers {
-        let mut headers = Headers::with_capacity(4);
-
-        headers.insert("Host", uri.host());
-        headers.insert("Referer", uri);
-
-        headers
-    }
-}
-
-impl str::FromStr for Headers {
-    type Err = ParseErr;
-
-    fn from_str(s: &str) -> Result<Headers, ParseErr> {
-        let headers: Vec<_> = s.trim().lines().collect();
-
-        if headers.iter().all(|e| e.contains(':')) {
-            let headers = headers
-                .iter()
-                .map(|&elem| {
-                    let elem: Vec<_> = elem.splitn(2, ": ").collect();
-                    (elem[0].to_string(), elem[1].to_string())
-                })
-                .collect();
-
-            Ok(Headers(headers))
-        } else {
-            Err(ParseErr::Invalid)
-        }
-    }
-}
-
-impl From<HashMap<String, String>> for Headers {
-    fn from(map: HashMap<String, String>) -> Headers {
-        Headers(map)
-    }
-}
-
-impl From<Headers> for HashMap<String, String> {
-    fn from(map: Headers) -> HashMap<String, String> {
-        map.0
     }
 }
 

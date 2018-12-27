@@ -166,7 +166,7 @@ impl<'a> RequestBuilder<'a> {
     ///Parses request message
     pub fn parse_msg(&self) -> Vec<u8> {
         let request_line = format!(
-            "{} /{} {}{}",
+            "{} {} {}{}",
             self.method.as_ref(),
             self.uri.resource(),
             self.version,
@@ -321,29 +321,45 @@ mod tests {
         let mut stream = TcpStream::connect((uri.host(), uri.port())).unwrap();
 
         RequestBuilder::new(&URI.parse().unwrap())
-            .send::<TcpStream, Vec<u8>>(&mut stream, &mut writer)
-            .unwrap();
-
-        let connector = TlsConnector::new().unwrap();
-        let mut secure_stream = connector.connect(uri.host(), stream).unwrap();
-
-        RequestBuilder::new(&URI_S.parse().unwrap())
-            .send::<_, Vec<u8>>(&mut secure_stream, &mut writer)
+            .header("Connection", "Close")
+            .send(&mut stream, &mut writer)
             .unwrap();
     }
 
     #[ignore]
     #[test]
-    //Test usually fails because `HashMap`, which is inner container for headers,
-    //is unsorted list
+    fn request_b_send_secure() {
+        let mut writer = Vec::new();
+        let uri: Uri = URI_S.parse().unwrap();
+
+        let stream = TcpStream::connect((uri.host(), uri.port())).unwrap();
+        let connector = TlsConnector::new().unwrap();
+        let mut secure_stream = connector.connect(uri.host(), stream).unwrap();
+
+        RequestBuilder::new(&URI_S.parse().unwrap())
+            .header("Connection", "Close")
+            .send(&mut secure_stream, &mut writer)
+            .unwrap();
+    }
+
+    #[test]
     fn request_b_parse_msg() {
         let uri = URI.parse().unwrap();
         let req = RequestBuilder::new(&uri);
-        const DEFAULT_MSG: &'static [u8] = b"GET /std/string/index.html HTTP/1.1\r\n\
-                                             Connection: Close\r\n\
-                                             Host: doc.rust-lang.org\r\n\r\n";
 
-        assert_eq!(req.parse_msg(), DEFAULT_MSG);
+        const DEFAULT_MSG: &str = "GET /std/string/index.html HTTP/1.1\r\n\
+                                   Referer: http://doc.rust-lang.org/std/string/index.html\r\n\
+                                   Host: doc.rust-lang.org\r\n\r\n";
+        let msg = req.parse_msg();
+        let msg = String::from_utf8_lossy(&msg).into_owned();
+
+        for line in DEFAULT_MSG.lines() {
+            assert!(msg.contains(line));
+        }
+
+        for line in msg.lines() {
+            assert!(DEFAULT_MSG.contains(line));
+        }
     }
 
     #[test]

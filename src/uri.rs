@@ -79,16 +79,18 @@ impl Uri {
 
     ///Returs resource `Uri` points to.
     pub fn resource(&self) -> String {
-        let mut path = self.path().to_string();
+        let mut resource = self.path().to_string();
+        let query = self.query();
+        let fragment = self.fragment();
 
-        if !self.query().is_empty() {
-            path = path + "?" + self.query();
+        if !query.is_empty() {
+            resource = resource + "?" + query;
         }
 
-        if !self.fragment().is_empty() {
-            path + "#" + self.fragment()
+        if !fragment.is_empty() {
+            resource + "#" + fragment
         } else {
-            path
+            resource
         }
     }
 }
@@ -108,34 +110,46 @@ impl str::FromStr for Uri {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (scheme, mut uri_part) = get_chunks(s, ":");
+        let mut s = s.to_string();
+        remove_spaces(&mut s);
+
+        let (scheme, mut uri_part) = get_chunks(&s, ":");
+
         let scheme = match scheme {
-            Some(s) => s,
+            Some(s) => s.to_string(),
             None => return Err(Error::Parse(ParseErr::Empty)),
         };
 
         let mut authority = None;
-        if let Some(u) = uri_part.clone() {
+
+        if let Some(u) = &uri_part {
             if u.contains("//") {
-                let (auth, mut part) = get_chunks(&u[2..], "/");
+                let (auth, part) = get_chunks(&u[2..], "/");
 
                 authority = match auth {
-                    Some(a) => match a.parse::<Authority>() {
+                    Some(a) => match a.parse() {
                         Ok(i) => Some(i),
                         Err(e) => return Err(Error::Parse(e)),
                     },
                     None => None,
                 };
 
-                uri_part = match part.as_mut() {
-                    Some(ref v) => Some(format!("/{}", v)),
-                    None => None,
-                };
+                uri_part = part;
             }
         }
 
         let (path, uri_part) = chunk(&uri_part, "?");
+
+        let path = if authority.is_some() {
+            path.and_then(|v| Some(format!("/{}", v)))
+        } else {
+            path.map(|s| s.to_string())
+        };
+
         let (query, fragment) = chunk(&uri_part, "#");
+
+        let query = query.map(|s| s.to_string());
+        let fragment = fragment.map(|s| s.to_string());
 
         Ok(Uri {
             scheme,
@@ -156,13 +170,13 @@ pub struct Authority {
 
 impl Authority {
     ///Returns information about the user
-    pub fn user_info(&self) -> &Option<String> {
-        &self.user_info
+    pub fn user_info(&self) -> &str {
+        &self.user_info.ref_or("")
     }
 
     ///Returns host
-    pub fn host(&self) -> &Option<String> {
-        &self.host
+    pub fn host(&self) -> &str {
+        &self.host.ref_or("")
     }
 
     ///Returns port
@@ -182,14 +196,15 @@ impl str::FromStr for Authority {
 
         let uri_part = if s.contains('@') {
             let (info, part) = get_chunks(&s, "@");
-            user_info = info;
+            user_info = info.map(|s| s.to_string());
             part
         } else {
-            Some(s)
+            Some(&s[..])
         };
 
         let (host, uri_part) = chunk(&uri_part, ":");
 
+        let host = host.map(|s| s.to_string());
         let port = match uri_part {
             Some(p) => Some(p.parse()?),
             None => None,
@@ -210,14 +225,12 @@ impl fmt::Display for Authority {
             None => "".to_string(),
         };
 
-        let host = self.host().ref_or("");
-
-        let port = match self.port() {
+        let port = match self.port {
             Some(ref p) => format!(":{}", p),
             None => "".to_string(),
         };
 
-        write!(f, "{}{}{}", user_info, host, port)
+        write!(f, "{}{}{}", user_info, self.host(), port)
     }
 }
 
@@ -228,7 +241,7 @@ fn remove_spaces(text: &mut String) {
 
 //Splits `String` from `base` by `separator`. If `base` is `None`, it will return
 //tuple consisting two `None` values.
-fn chunk(base: &Option<String>, separator: &str) -> (Option<String>, Option<String>) {
+fn chunk<'a>(base: &'a Option<&'a str>, separator: &'a str) -> (Option<&'a str>, Option<&'a str>) {
     match base {
         Some(ref u) => get_chunks(u, separator),
         None => (None, None),
@@ -238,22 +251,18 @@ fn chunk(base: &Option<String>, separator: &str) -> (Option<String>, Option<Stri
 //Splits `s` by `separator`. If `separator` is found inside `s`, it will return two `Some` values
 //consisting parts of splitted `String`. If `separator` is at the end of `s` or it's not found,
 //it will return tuple consisting `Some` with `s` inside and None.
-fn get_chunks(s: &str, separator: &str) -> (Option<String>, Option<String>) {
+fn get_chunks<'a>(s: &'a str, separator: &'a str) -> (Option<&'a str>, Option<&'a str>) {
     match s.find(separator) {
         Some(i) => {
             let (chunk, rest) = s.split_at(i);
             let rest = &rest[separator.len()..];
-            let rest = if rest.is_empty() {
-                None
-            } else {
-                Some(rest.to_string())
-            };
+            let rest = if rest.is_empty() { None } else { Some(rest) };
 
-            (Some(chunk.to_string()), rest)
+            (Some(chunk), rest)
         }
         None => {
             if !s.is_empty() {
-                (Some(s.to_string()), None)
+                (Some(s), None)
             } else {
                 (None, None)
             }
