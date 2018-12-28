@@ -2,7 +2,7 @@
 extern crate http_req;
 extern crate test;
 
-use http_req::{response::Response, uri::Uri};
+use http_req::{request::RequestBuilder, response::Response, uri::Uri};
 use std::{fs::File, io::Read};
 use test::Bencher;
 
@@ -18,9 +18,21 @@ fn parse_response(b: &mut Bencher) {
     });
 }
 
+const URI: &str = "https://doc.rust-lang.org/stable/std/string/struct.String.html";
+
+#[bench]
+fn request_builder_send(b: &mut Bencher) {
+    let mut reader = File::open("benches/res.txt").unwrap();
+
+    b.iter(|| {
+        let uri = URI.parse::<Uri>().unwrap();
+        let mut writer = Vec::new();
+
+        RequestBuilder::new(&uri).send(&mut reader, &mut writer)
+    });
+}
+
 #[bench]
 fn parse_uri(b: &mut Bencher) {
-    const URL: &str = "https://doc.rust-lang.org/stable/std/string/struct.String.html";
-
-    b.iter(|| URL.parse::<Uri>());
+    b.iter(|| URI.parse::<Uri>());
 }
