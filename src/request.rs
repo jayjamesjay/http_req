@@ -14,7 +14,7 @@ use std::{
 const CR_LF: &str = "\r\n";
 const HTTP_V: &str = "HTTP/1.1";
 
-///Copies data from `reader` to `writer` untill the specified `val`ue is reached.
+///Copies data from `reader` to `writer` until the specified `val`ue is reached.
 ///Returns how many bytes has been read.
 pub fn copy_until<R, W>(reader: &mut R, writer: &mut W, val: &[u8]) -> Result<usize, io::Error>
 where
@@ -118,7 +118,7 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
-    ///Sets body for reequest
+    ///Sets body for request
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
         self.body = Some(body);
         self
@@ -214,13 +214,16 @@ impl<'a> Request<'a> {
     ///Sends HTTP request.
     ///
     ///Creates `TcpStream` (and wraps it with `TlsStream` if needed). Writes request message
-    ///to created strean. Returns response for this request. Writes response's body to `writer`.
+    ///to created stream. Returns response for this request. Writes response's body to `writer`.
     pub fn send<T: Write>(&self, writer: &mut T) -> Result<Response, error::Error> {
-        let mut stream = TcpStream::connect((self.inner.uri.host(), self.inner.uri.port()))?;
+        let mut stream = TcpStream::connect((
+            self.inner.uri.host().unwrap_or(""),
+            self.inner.uri.corr_port(),
+        ))?;
 
         if self.inner.uri.scheme() == "https" {
             let connector = TlsConnector::new()?;
-            let mut stream = connector.connect(self.inner.uri.host(), stream)?;
+            let mut stream = connector.connect(self.inner.uri.host().unwrap_or(""), stream)?;
 
             self.inner.send(&mut stream, writer)
         } else {
@@ -251,11 +254,35 @@ pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     const UNSUCCESS_CODE: u16 = 400;
     const URI: &str = "http://doc.rust-lang.org/std/string/index.html";
     const URI_S: &str = "https://doc.rust-lang.org/std/string/index.html";
     const BODY: [u8; 14] = [78, 97, 109, 101, 61, 74, 97, 109, 101, 115, 43, 74, 97, 121];
+
+    const RESPONSE: &'static [u8; 129] = b"HTTP/1.1 200 OK\r\n\
+                                         Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+                                         Content-Type: text/html\r\n\
+                                         Content-Length: 100\r\n\r\n\
+                                         <html>hello</html>\r\n\r\nhello";
+
+    const RESPONSE_H: &'static [u8; 102] = b"HTTP/1.1 200 OK\r\n\
+                                           Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+                                           Content-Type: text/html\r\n\
+                                           Content-Length: 100\r\n\r\n";
+
+    #[test]
+    fn copy_data_until() {
+        let mut reader = Vec::new();
+        reader.extend(&RESPONSE[..]);
+
+        let mut reader = Cursor::new(reader);
+        let mut writer = Vec::new();
+
+        copy_until(&mut reader, &mut writer, &CR_LF_2).unwrap();
+        assert_eq!(writer, &RESPONSE_H[..]);
+    }
 
     #[test]
     fn request_b_new() {
@@ -318,7 +345,7 @@ mod tests {
     fn request_b_send() {
         let mut writer = Vec::new();
         let uri: Uri = URI.parse().unwrap();
-        let mut stream = TcpStream::connect((uri.host(), uri.port())).unwrap();
+        let mut stream = TcpStream::connect((uri.host().unwrap_or(""), uri.corr_port())).unwrap();
 
         RequestBuilder::new(&URI.parse().unwrap())
             .header("Connection", "Close")
@@ -332,9 +359,9 @@ mod tests {
         let mut writer = Vec::new();
         let uri: Uri = URI_S.parse().unwrap();
 
-        let stream = TcpStream::connect((uri.host(), uri.port())).unwrap();
+        let stream = TcpStream::connect((uri.host().unwrap_or(""), uri.corr_port())).unwrap();
         let connector = TlsConnector::new().unwrap();
-        let mut secure_stream = connector.connect(uri.host(), stream).unwrap();
+        let mut secure_stream = connector.connect(uri.host().unwrap_or(""), stream).unwrap();
 
         RequestBuilder::new(&URI_S.parse().unwrap())
             .header("Connection", "Close")
