@@ -12,6 +12,9 @@ use std::{
 
 pub(crate) const CR_LF_2: [u8; 4] = [13, 10, 13, 10];
 
+///Represents an HTTP response.
+///
+///It contains `Headers` and `Status` parsed from response.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Response {
     status: Status,
@@ -83,6 +86,7 @@ impl Response {
     }
 }
 
+///Status of HTTP response
 #[derive(PartialEq, Debug, Clone)]
 pub struct Status {
     version: String,
@@ -121,6 +125,18 @@ impl str::FromStr for Status {
 
 #[derive(Debug, PartialEq, Clone, Default)]
 ///Wrapper around HashMap<String, String> with additional functionality for parsing HTTP headers
+///
+///# Example
+///```
+///use http_req::response::Headers;
+///
+///fn main() {
+///   let mut headers = Headers::new();
+///   headers.insert("Connection", "Close");
+///
+///   assert_eq!(headers.get("Connection"), Some(&"Close".to_string()))
+///}
+///```
 pub struct Headers(HashMap<String, String>);
 
 impl Headers {
@@ -147,8 +163,8 @@ impl Headers {
     }
 
     ///Returns a reference to the value corresponding to the key.
-    pub fn get(&self, v: &str) -> Option<&std::string::String> {
-        self.0.get(v)
+    pub fn get<T: ToString>(&self, k: T) -> Option<&std::string::String> {
+        self.0.get(&k.to_string())
     }
 
     ///Inserts a key-value pair into the headers.
@@ -212,6 +228,7 @@ impl From<Headers> for HashMap<String, String> {
 }
 
 ///Code sent by a server in response to a client's request.
+///
 ///# Example
 ///```
 ///use http_req::response::StatusCode;

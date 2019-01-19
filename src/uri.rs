@@ -29,6 +29,18 @@ impl<'a, U: ?Sized, T: AsRef<U>> RefInner<'a, T, U> for Option<T> {
     }
 }
 
+///Representation of Uniform Resource Identifier
+///
+///# Example
+///```
+///use http_req::uri::Uri;
+///
+///fn main() {
+///    let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+///
+///    assert_eq!(uri.host(), Some("foo.com"));
+///}
+///```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Uri {
     scheme: String,
@@ -181,6 +193,18 @@ impl str::FromStr for Uri {
     }
 }
 
+///Authority of Uri
+///
+///# Example
+///```
+///use http_req::uri::Authority;
+///
+///fn main() {
+///    let auth: Authority = "user:info@foo.com:443".parse().unwrap();
+///
+///    assert_eq!(auth.host(), Some("foo.com"));
+///}
+///```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Authority {
     username: Option<String>,

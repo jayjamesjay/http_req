@@ -6,7 +6,7 @@ use crate::{
 };
 use native_tls::TlsConnector;
 use std::{
-    convert,
+    fmt,
     io::{self, Read, Write},
     net::TcpStream,
 };
@@ -42,6 +42,7 @@ where
     Ok(read)
 }
 
+///HTTP request methods
 #[derive(Debug, PartialEq, Clone)]
 pub enum Method {
     GET,
@@ -53,11 +54,11 @@ pub enum Method {
     PATCH,
 }
 
-impl convert::AsRef<str> for Method {
-    fn as_ref(&self) -> &str {
+impl fmt::Display for Method {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::Method::*;
 
-        match self {
+        let method = match self {
             GET => "GET",
             HEAD => "HEAD",
             POST => "POST",
@@ -65,10 +66,16 @@ impl convert::AsRef<str> for Method {
             DELETE => "DELETE",
             OPTIONS => "OPTIONS",
             PATCH => "PATCH",
-        }
+        };
+
+        write!(f, "{}", method)
     }
 }
 
+///Relatively low-level struct for making HTTP requests.
+///
+///It can work with any stream that implements `Read` and `Write`.
+///By default it does not close the connection after completion of the response.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RequestBuilder<'a> {
     uri: &'a Uri,
@@ -163,11 +170,11 @@ impl<'a> RequestBuilder<'a> {
         Response::from_head(&head)
     }
 
-    ///Parses request message
+    ///Parses request message for this `RequestBuilder`
     pub fn parse_msg(&self) -> Vec<u8> {
         let request_line = format!(
             "{} {} {}{}",
-            self.method.as_ref(),
+            self.method,
             self.uri.resource(),
             self.version,
             CR_LF
@@ -189,6 +196,10 @@ impl<'a> RequestBuilder<'a> {
     }
 }
 
+///Relatively higher-level struct for making HTTP requests.
+///
+///It creates stream (`TcpStream` or `TlsStream`) appropriate for the type of uri (`http`/`https`)
+///By default it closes connection after completion of the response.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Request<'a> {
     inner: RequestBuilder<'a>,
@@ -201,6 +212,27 @@ impl<'a> Request<'a> {
         builder.header("Connection", "Close");
 
         Request { inner: builder }
+    }
+
+    ///Replaces all it's headers with headers passed to the function
+    pub fn headers<T>(&mut self, headers: T) -> &mut Self
+    where
+        Headers: From<T>,
+    {
+        self.inner.headers(headers);
+
+        self
+    }
+
+    ///Adds header to existing/default headers
+    pub fn header<T, U>(&mut self, key: &T, val: &U) -> &mut Self
+    where
+        T: ToString + ?Sized,
+        U: ToString + ?Sized,
+    {
+        self.inner.header(key, val);
+
+        self
     }
 
     ///Changes request's method
@@ -282,6 +314,12 @@ mod tests {
 
         copy_until(&mut reader, &mut writer, &CR_LF_2).unwrap();
         assert_eq!(writer, &RESPONSE_H[..]);
+    }
+
+    #[test]
+    fn method_display() {
+        const METHOD: Method = Method::HEAD;
+        assert_eq!(&format!("{}", METHOD), "HEAD");
     }
 
     #[test]
@@ -402,6 +440,39 @@ mod tests {
         req.set_method(Method::HEAD);
 
         assert_eq!(req.inner.method, Method::HEAD);
+    }
+
+    #[test]
+    fn request_headers() {
+        let mut headers = Headers::new();
+        headers.insert("Accept-Charset", "utf-8");
+        headers.insert("Accept-Language", "en-US");
+        headers.insert("Host", "doc.rust-lang.org");
+        headers.insert("Connection", "Close");
+
+        let uri: Uri = URI.parse().unwrap();
+        let mut req = Request::new(&uri);
+        let req = req.headers(headers.clone());
+
+        assert_eq!(req.inner.headers, headers);
+    }
+
+    #[test]
+    fn request_header() {
+        let uri: Uri = URI.parse().unwrap();
+        let mut req = Request::new(&uri);
+        let k = "Accept-Language";
+        let v = "en-US";
+
+        let mut expect_headers = Headers::new();
+        expect_headers.insert("Host", "doc.rust-lang.org");
+        expect_headers.insert("Referer", "http://doc.rust-lang.org/std/string/index.html");
+        expect_headers.insert("Connection", "Close");
+        expect_headers.insert(k, v);
+
+        let req = req.header(k, v);
+
+        assert_eq!(req.inner.headers, expect_headers);
     }
 
     #[test]
