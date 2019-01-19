@@ -1,6 +1,6 @@
 # http_req
 [![Build Status](https://travis-ci.org/jayjamesjay/http_req.svg?branch=master)](https://travis-ci.org/jayjamesjay/http_req)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.4.2-orange.svg?longCache=true)](https://crates.io/crates/http_req)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.4.3-orange.svg?longCache=true)](https://crates.io/crates/http_req)
 
 Simple and lightweight HTTP client with built-in HTTPS support.
 Currently it's in heavy development and may frequently change.
