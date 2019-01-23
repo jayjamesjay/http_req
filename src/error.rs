@@ -65,12 +65,14 @@ impl StdErr for Error {
     }
 }
 
+#[cfg(feature = "native-tls")]
 impl From<native_tls::Error> for Error {
     fn from(_e: native_tls::Error) -> Self {
         Error::Tls
     }
 }
 
+#[cfg(feature = "native-tls")]
 impl<T> From<native_tls::HandshakeError<T>> for Error {
     fn from(_e: native_tls::HandshakeError<T>) -> Self {
         Error::Tls
