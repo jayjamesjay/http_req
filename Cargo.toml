@@ -10,8 +10,16 @@ categories = ["web-programming::http-client", "network-programming"]
 keywords = ["http", "client", "request"]
 edition = "2018"
 
-[dependencies]
-native-tls = "^0.2.2"
+[features]
+default = ["native-tls"]
+
+[dependencies.native-tls]
+version = "^0.2.2"
+optional = true
+
+[dependencies.rustls]
+version = "0.15.0"
+optional = true
 
 [badges]
 travis-ci = { repository = "jayjamesjay/http_req"}
