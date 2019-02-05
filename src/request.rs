@@ -2,9 +2,9 @@
 use crate::{
     error,
     response::{Headers, Response, CR_LF_2},
+    tls,
     uri::Uri,
 };
-use native_tls::TlsConnector;
 use std::{
     fmt,
     io::{self, Read, Write},
@@ -254,9 +254,8 @@ impl<'a> Request<'a> {
         ))?;
 
         if self.inner.uri.scheme() == "https" {
-            let connector = TlsConnector::new()?;
-            let mut stream = connector.connect(self.inner.uri.host().unwrap_or(""), stream)?;
-
+            let mut stream =
+                tls::Config::default().connect(self.inner.uri.host().unwrap_or(""), stream)?;
             self.inner.send(&mut stream, writer)
         } else {
             self.inner.send(&mut stream, writer)
@@ -398,8 +397,9 @@ mod tests {
         let uri: Uri = URI_S.parse().unwrap();
 
         let stream = TcpStream::connect((uri.host().unwrap_or(""), uri.corr_port())).unwrap();
-        let connector = TlsConnector::new().unwrap();
-        let mut secure_stream = connector.connect(uri.host().unwrap_or(""), stream).unwrap();
+        let mut secure_stream = tls::Config::default()
+            .connect(uri.host().unwrap_or(""), stream)
+            .unwrap();
 
         RequestBuilder::new(&URI_S.parse().unwrap())
             .header("Connection", "Close")

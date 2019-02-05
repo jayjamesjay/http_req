@@ -1,5 +1,4 @@
-use http_req::{request::RequestBuilder, uri::Uri};
-use native_tls::TlsConnector;
+use http_req::{request::RequestBuilder, tls, uri::Uri};
 use std::net::TcpStream;
 
 fn main() {
@@ -10,8 +9,9 @@ fn main() {
     let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
 
     //Open secure connection over TlsStream, because of `addr` (https)
-    let connector = TlsConnector::new().unwrap();
-    let mut stream = connector.connect(addr.host().unwrap(), stream).unwrap();
+    let mut stream = tls::Config::default()
+        .connect(addr.host().unwrap(), stream)
+        .unwrap();
 
     //Container for response's body
     let mut writer = Vec::new();
