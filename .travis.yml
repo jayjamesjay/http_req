@@ -11,4 +11,4 @@ os:
   - osx
 script:
   - cargo test
-  - cargo test --features rustls --no-default-features
+  - cargo test --features rust-tls --no-default-features
