@@ -23,10 +23,17 @@ fn main() {
 }
 ```
 
-## How to use `rustls`
-In order to compile your project with `rustls`, run:
-```
-$ cargo build --features rust-tls --no-default-features
+## How to use with `rustls`:
+In order to use `rustls` in your project,  add following lines to `Cargo.toml`:
+```toml
+[features]
+default = ["http_req"]
+
+[dependencies.http_req]
+version = "0.4.4"
+default-features = false
+features = ["rust-tls"]
+optional = true
 ```
 
 ## License
