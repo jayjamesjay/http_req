@@ -77,13 +77,6 @@ impl fmt::Display for Method {
 ///
 ///It can work with any stream that implements `Read` and `Write`.
 ///By default it does not close the connection after completion of the response.
-///
-///About timeouts:
-///
-///- Default timeout for starting connection is 1 minute.
-///- On Linux, `man 7 socket` says that read/write timeouts default to zero,
-///  which means the operations will _never_ time out. However, default value for
-///  this builder is 1 minute each.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RequestBuilder<'a> {
     uri: &'a Uri,
@@ -91,9 +84,6 @@ pub struct RequestBuilder<'a> {
     version: &'a str,
     headers: Headers,
     body: Option<&'a [u8]>,
-    connect_timeout: Option<Duration>,
-    read_timeout: Option<Duration>,
-    write_timeout: Option<Duration>,
 }
 
 impl<'a> RequestBuilder<'a> {
@@ -105,9 +95,6 @@ impl<'a> RequestBuilder<'a> {
             method: Method::GET,
             version: HTTP_V,
             body: None,
-            connect_timeout: Some(Duration::from_secs(60)),
-            read_timeout: Some(Duration::from_secs(60)),
-            write_timeout: Some(Duration::from_secs(60)),
         }
     }
 
@@ -142,42 +129,6 @@ impl<'a> RequestBuilder<'a> {
     ///Sets body for request
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
         self.body = Some(body);
-        self
-    }
-
-    ///Sets connect timeout while using internal `TcpStream` instance
-    ///
-    ///- If there is a timeout, it will be passed to
-    ///  [`TcpStream::connect_timeout`][TcpStream::connect_timeout].
-    ///- If `None` is provided, [`TcpStream::connect`][TcpStream::connect] will
-    ///  be used, and it will _not_ time out.
-    ///
-    ///[TcpStream::connect]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect
-    ///[TcpStream::connect_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect_timeout
-    pub fn set_connect_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.connect_timeout = timeout;
-        self
-    }
-
-    ///Sets read timeout on internal `TcpStream` instance
-    ///
-    ///`timeout` will be passed to
-    ///[`TcpStream::set_read_timeout`][TcpStream::set_read_timeout].
-    ///
-    ///[TcpStream::set_read_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_read_timeout
-    pub fn set_read_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.read_timeout = timeout;
-        self
-    }
-
-    ///Sets write timeout on internal `TcpStream` instance
-    ///
-    ///`timeout` will be passed to
-    ///[`TcpStream::set_write_timeout`][TcpStream::set_write_timeout].
-    ///
-    ///[TcpStream::set_write_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_write_timeout
-    pub fn set_write_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.write_timeout = timeout;
         self
     }
 
@@ -250,9 +201,18 @@ impl<'a> RequestBuilder<'a> {
 ///
 ///It creates stream (`TcpStream` or `TlsStream`) appropriate for the type of uri (`http`/`https`)
 ///By default it closes connection after completion of the response.
+///
+///About timeouts:
+///
+///- Default timeout for starting connection is 1 minute.
+///- On Linux, `man 7 socket` says that read/write timeouts default to zero, which means
+///  the operations will _never_ time out. However, default value for this builder is 1 minute each.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Request<'a> {
     inner: RequestBuilder<'a>,
+    connect_timeout: Option<Duration>,
+    read_timeout: Option<Duration>,
+    write_timeout: Option<Duration>,
 }
 
 impl<'a> Request<'a> {
@@ -261,7 +221,12 @@ impl<'a> Request<'a> {
         let mut builder = RequestBuilder::new(&uri);
         builder.header("Connection", "Close");
 
-        Request { inner: builder }
+        Request {
+            inner: builder,
+            connect_timeout: Some(Duration::from_secs(60)),
+            read_timeout: Some(Duration::from_secs(60)),
+            write_timeout: Some(Duration::from_secs(60)),
+        }
     }
 
     ///Replaces all it's headers with headers passed to the function
@@ -295,34 +260,37 @@ impl<'a> Request<'a> {
 
     ///Sets connect timeout while using internal `TcpStream` instance
     ///
-    ///The timeout is forwarded to
-    ///[`RequestBuilder::set_connect_timeout`][RequestBuilder::set_connect_timeout].
+    ///- If there is a timeout, it will be passed to
+    ///  [`TcpStream::connect_timeout`][TcpStream::connect_timeout].
+    ///- If `None` is provided, [`TcpStream::connect`][TcpStream::connect] will
+    ///  be used, and it will _not_ time out.
     ///
-    ///[RequestBuilder::set_connect_timeout]: struct.RequestBuilder.html#method.set_connect_timeout
+    ///[TcpStream::connect]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect
+    ///[TcpStream::connect_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect_timeout
     pub fn set_connect_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.inner.set_connect_timeout(timeout);
+        self.connect_timeout = timeout;
         self
     }
 
     ///Sets read timeout on internal `TcpStream` instance
     ///
-    ///The timeout is forwarded to
-    ///[`RequestBuilder::set_read_timeout`][RequestBuilder::set_read_timeout].
+    ///`timeout` will be passed to
+    ///[`TcpStream::set_read_timeout`][TcpStream::set_read_timeout].
     ///
-    ///[RequestBuilder::set_read_timeout]: struct.RequestBuilder.html#method.set_read_timeout
+    ///[TcpStream::set_read_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_read_timeout
     pub fn set_read_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.inner.set_read_timeout(timeout);
+        self.read_timeout = timeout;
         self
     }
 
     ///Sets write timeout on internal `TcpStream` instance
     ///
-    ///The timeout is forwarded to
-    ///[`RequestBuilder::set_write_timeout`][RequestBuilder::set_write_timeout].
+    ///`timeout` will be passed to
+    ///[`TcpStream::set_write_timeout`][TcpStream::set_write_timeout].
     ///
-    ///[RequestBuilder::set_write_timeout]: struct.RequestBuilder.html#method.set_write_timeout
+    ///[TcpStream::set_write_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_write_timeout
     pub fn set_write_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.inner.set_write_timeout(timeout);
+        self.write_timeout = timeout;
         self
     }
 
@@ -333,14 +301,13 @@ impl<'a> Request<'a> {
     pub fn send<T: Write>(&self, writer: &mut T) -> Result<Response, error::Error> {
         let host = self.inner.uri.host().unwrap_or("");
         let port = self.inner.uri.corr_port();
-        let mut stream = match self.inner.connect_timeout {
+        let mut stream = match self.connect_timeout {
             Some(timeout) => connect_timeout(host, port, timeout)?,
             None => TcpStream::connect((host, port))?,
         };
 
-        //Duration implements Copy trait, so does Option<Duration>
-        stream.set_read_timeout(self.inner.read_timeout)?;
-        stream.set_write_timeout(self.inner.write_timeout)?;
+        stream.set_read_timeout(self.read_timeout)?;
+        stream.set_write_timeout(self.write_timeout)?;
 
         if self.inner.uri.scheme() == "https" {
             let mut stream =
