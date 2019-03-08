@@ -116,8 +116,10 @@ impl str::FromStr for Status {
         let mut status_line = status_line.trim().splitn(3, ' ');
 
         let version = status_line.next().ok_or(ParseErr::Invalid)?;
-        let code: u16 = status_line.next().ok_or(ParseErr::Invalid)?.parse()?;
-        let reason = status_line.next().ok_or(ParseErr::Invalid)?;
+        let code: StatusCode = status_line.next().ok_or(ParseErr::Invalid)?.parse()?;
+        let reason = status_line
+            .next()
+            .unwrap_or_else(|| code.reason().unwrap_or("Unknown"));
 
         Ok(Status::from((version, code, reason)))
     }
@@ -243,7 +245,7 @@ impl From<Headers> for HashMap<String, String> {
 pub struct StatusCode(u16);
 
 impl StatusCode {
-    pub fn new(code: u16) -> StatusCode {
+    pub const fn new(code: u16) -> StatusCode {
         StatusCode(code)
     }
 
@@ -276,6 +278,73 @@ impl StatusCode {
     pub fn is<F: FnOnce(u16) -> bool>(self, f: F) -> bool {
         f(self.0)
     }
+
+    ///Returns `Reason-Phrase` corresponding to this `StatusCode`
+    pub fn reason(self) -> Option<&'static str> {
+        match self.0 {
+            100 => Some("Continue"),
+            101 => Some("Switching Protocols"),
+            102 => Some("Processing"),
+            200 => Some("OK"),
+            201 => Some("Created"),
+            202 => Some("Accepted"),
+            203 => Some("Non Authoritative Information"),
+            204 => Some("No Content"),
+            205 => Some("Reset Content"),
+            206 => Some("Partial Content"),
+            207 => Some("Multi-Status"),
+            208 => Some("Already Reported"),
+            226 => Some("IM Used"),
+            300 => Some("Multiple Choices"),
+            301 => Some("Moved Permanently"),
+            302 => Some("Found"),
+            303 => Some("See Other"),
+            304 => Some("Not Modified"),
+            305 => Some("Use Proxy"),
+            307 => Some("Temporary Redirect"),
+            308 => Some("Permanent Redirect"),
+            400 => Some("Bad Request"),
+            401 => Some("Unauthorized"),
+            402 => Some("Payment Required"),
+            403 => Some("Forbidden"),
+            404 => Some("Not Found"),
+            405 => Some("Method Not Allowed"),
+            406 => Some("Not Acceptable"),
+            407 => Some("Proxy Authentication Required"),
+            408 => Some("Request Timeout"),
+            409 => Some("Conflict"),
+            410 => Some("Gone"),
+            411 => Some("Length Required"),
+            412 => Some("Precondition Failed"),
+            413 => Some("Payload Too Large"),
+            414 => Some("URI Too Long"),
+            415 => Some("Unsupported Media Type"),
+            416 => Some("Range Not Satisfiable"),
+            417 => Some("Expectation Failed"),
+            418 => Some("I'm a teapot"),
+            421 => Some("Misdirected Request"),
+            422 => Some("Unprocessable Entity"),
+            423 => Some("Locked"),
+            424 => Some("Failed Dependency"),
+            426 => Some("Upgrade Required"),
+            428 => Some("Precondition Required"),
+            429 => Some("Too Many Requests"),
+            431 => Some("Request Header Fields Too Large"),
+            451 => Some("Unavailable For Legal Reasons"),
+            500 => Some("Internal Server Error"),
+            501 => Some("Not Implemented"),
+            502 => Some("Bad Gateway"),
+            503 => Some("Service Unavailable"),
+            504 => Some("Gateway Timeout"),
+            505 => Some("HTTP Version Not Supported"),
+            506 => Some("Variant Also Negotiates"),
+            507 => Some("Insufficient Storage"),
+            508 => Some("Loop Detected"),
+            510 => Some("Not Extended"),
+            511 => Some("Network Authentication Required"),
+            _ => None,
+        }
+    }
 }
 
 impl From<StatusCode> for u16 {
@@ -293,6 +362,14 @@ impl From<u16> for StatusCode {
 impl fmt::Display for StatusCode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl str::FromStr for StatusCode {
+    type Err = ParseErr;
+
+    fn from_str(s: &str) -> Result<StatusCode, ParseErr> {
+        Ok(StatusCode::new(s.parse()?))
     }
 }
 
@@ -314,16 +391,16 @@ where
 mod tests {
     use super::*;
 
-    const RESPONSE: &'static [u8; 129] = b"HTTP/1.1 200 OK\r\n\
+    const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
                                          Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
                                          Content-Type: text/html\r\n\
                                          Content-Length: 100\r\n\r\n\
                                          <html>hello</html>\r\n\r\nhello";
-    const RESPONSE_H: &'static [u8; 102] = b"HTTP/1.1 200 OK\r\n\
+    const RESPONSE_H: &[u8; 102] = b"HTTP/1.1 200 OK\r\n\
                                            Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
                                            Content-Type: text/html\r\n\
                                            Content-Length: 100\r\n\r\n";
-    const BODY: &'static [u8; 27] = b"<html>hello</html>\r\n\r\nhello";
+    const BODY: &[u8; 27] = b"<html>hello</html>\r\n\r\nhello";
 
     const STATUS_LINE: &str = "HTTP/1.1 200 OK";
     const VERSION: &str = "HTTP/1.1";
@@ -408,6 +485,12 @@ mod tests {
     }
 
     #[test]
+    fn status_code_reason() {
+        assert_eq!(StatusCode(200).reason(), Some("OK"));
+        assert_eq!(StatusCode(400).reason(), Some("Bad Request"));
+    }
+
+    #[test]
     fn status_code_from() {
         assert_eq!(StatusCode::from(200), StatusCode(200));
     }
@@ -423,6 +506,12 @@ mod tests {
         const CODE_EXPECT: &str = "Status Code: 200";
 
         assert_eq!(code, CODE_EXPECT);
+    }
+
+    #[test]
+    fn status_code_from_str() {
+        assert_eq!("200".parse::<StatusCode>(), Ok(StatusCode(200)));
+        assert_ne!("400".parse::<StatusCode>(), Ok(StatusCode(404)));
     }
 
     #[test]

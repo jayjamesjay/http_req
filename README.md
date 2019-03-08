@@ -1,6 +1,6 @@
 # http_req
 [![Build Status](https://travis-ci.org/jayjamesjay/http_req.svg?branch=master)](https://travis-ci.org/jayjamesjay/http_req)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.4.4-orange.svg?longCache=true)](https://crates.io/crates/http_req)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.4.5-orange.svg?longCache=true)](https://crates.io/crates/http_req)
 
 Simple and lightweight HTTP client with built-in HTTPS support.
 Currently it's in heavy development and may frequently change.
@@ -24,16 +24,10 @@ fn main() {
 ```
 
 ## How to use with `rustls`:
-In order to use `rustls` in your project,  add following lines to `Cargo.toml`:
+In order to use `http_req` with `rustls` in your project,  add following lines to `Cargo.toml`:
 ```toml
-[features]
-default = ["http_req"]
-
-[dependencies.http_req]
-version = "0.4.4"
-default-features = false
-features = ["rust-tls"]
-optional = true
+[dependencies]
+http_req  = {version="^0.4", default-features = false, features = ["rust-tls"]}
 ```
 
 ## License

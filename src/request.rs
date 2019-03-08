@@ -285,20 +285,21 @@ pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::response::StatusCode;
     use std::io::Cursor;
 
-    const UNSUCCESS_CODE: u16 = 400;
+    const UNSUCCESS_CODE: StatusCode = StatusCode::new(400);
     const URI: &str = "http://doc.rust-lang.org/std/string/index.html";
     const URI_S: &str = "https://doc.rust-lang.org/std/string/index.html";
     const BODY: [u8; 14] = [78, 97, 109, 101, 61, 74, 97, 109, 101, 115, 43, 74, 97, 121];
 
-    const RESPONSE: &'static [u8; 129] = b"HTTP/1.1 200 OK\r\n\
+    const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
                                          Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
                                          Content-Type: text/html\r\n\
                                          Content-Length: 100\r\n\r\n\
                                          <html>hello</html>\r\n\r\nhello";
 
-    const RESPONSE_H: &'static [u8; 102] = b"HTTP/1.1 200 OK\r\n\
+    const RESPONSE_H: &[u8; 102] = b"HTTP/1.1 200 OK\r\n\
                                            Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
                                            Content-Type: text/html\r\n\
                                            Content-Length: 100\r\n\r\n";
@@ -482,7 +483,7 @@ mod tests {
         let uri = URI.parse().unwrap();
         let res = Request::new(&uri).send(&mut writer).unwrap();
 
-        assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
+        assert_ne!(res.status_code(), UNSUCCESS_CODE);
     }
 
     #[ignore]
@@ -491,21 +492,21 @@ mod tests {
         let mut writer = Vec::new();
         let res = get(URI, &mut writer).unwrap();
 
-        assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
+        assert_ne!(res.status_code(), UNSUCCESS_CODE);
 
         let mut writer = Vec::with_capacity(200);
         let res = get(URI_S, &mut writer).unwrap();
 
-        assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
+        assert_ne!(res.status_code(), UNSUCCESS_CODE);
     }
 
     #[ignore]
     #[test]
     fn request_head() {
         let res = head(URI).unwrap();
-        assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
+        assert_ne!(res.status_code(), UNSUCCESS_CODE);
 
         let res = head(URI_S).unwrap();
-        assert_ne!(u16::from(res.status_code()), UNSUCCESS_CODE);
+        assert_ne!(res.status_code(), UNSUCCESS_CODE);
     }
 }
