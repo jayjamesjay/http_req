@@ -9,6 +9,7 @@ use std::{
     fmt,
     io::{self, Read, Write},
     net::TcpStream,
+    time::Duration,
 };
 
 const CR_LF: &str = "\r\n";
@@ -76,6 +77,13 @@ impl fmt::Display for Method {
 ///
 ///It can work with any stream that implements `Read` and `Write`.
 ///By default it does not close the connection after completion of the response.
+///
+///About timeouts:
+///
+///- Default timeout for starting connection is 1 minute.
+///- On Linux, `man 7 socket` says that read/write timeouts default to zero,
+///  which means the operations will _never_ time out. However, default value for
+///  this builder is 1 minute each.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RequestBuilder<'a> {
     uri: &'a Uri,
@@ -83,6 +91,9 @@ pub struct RequestBuilder<'a> {
     version: &'a str,
     headers: Headers,
     body: Option<&'a [u8]>,
+    connect_timeout: Option<Duration>,
+    read_timeout: Option<Duration>,
+    write_timeout: Option<Duration>,
 }
 
 impl<'a> RequestBuilder<'a> {
@@ -94,6 +105,9 @@ impl<'a> RequestBuilder<'a> {
             method: Method::GET,
             version: HTTP_V,
             body: None,
+            connect_timeout: Some(Duration::from_secs(60)),
+            read_timeout: Some(Duration::from_secs(60)),
+            write_timeout: Some(Duration::from_secs(60)),
         }
     }
 
@@ -128,6 +142,42 @@ impl<'a> RequestBuilder<'a> {
     ///Sets body for request
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
         self.body = Some(body);
+        self
+    }
+
+    ///Sets connect timeout while using internal `TcpStream` instance
+    ///
+    ///- If there is a timeout, it will be passed to
+    ///  [`TcpStream::connect_timeout`][TcpStream::connect_timeout].
+    ///- If `None` is provided, [`TcpStream::connect`][TcpStream::connect] will
+    ///  be used, and it will _not_ time out.
+    ///
+    ///[TcpStream::connect]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect
+    ///[TcpStream::connect_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect_timeout
+    pub fn set_connect_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
+        self.connect_timeout = timeout;
+        self
+    }
+
+    ///Sets read timeout on internal `TcpStream` instance
+    ///
+    ///`timeout` will be passed to
+    ///[`TcpStream::set_read_timeout`][TcpStream::set_read_timeout].
+    ///
+    ///[TcpStream::set_read_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_read_timeout
+    pub fn set_read_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
+        self.read_timeout = timeout;
+        self
+    }
+
+    ///Sets write timeout on internal `TcpStream` instance
+    ///
+    ///`timeout` will be passed to
+    ///[`TcpStream::set_write_timeout`][TcpStream::set_write_timeout].
+    ///
+    ///[TcpStream::set_write_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_write_timeout
+    pub fn set_write_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
+        self.write_timeout = timeout;
         self
     }
 
@@ -243,15 +293,54 @@ impl<'a> Request<'a> {
         self.inner.method(method);
     }
 
+    ///Sets connect timeout while using internal `TcpStream` instance
+    ///
+    ///The timeout is forwarded to
+    ///[`RequestBuilder::set_connect_timeout`][RequestBuilder::set_connect_timeout].
+    ///
+    ///[RequestBuilder::set_connect_timeout]: struct.RequestBuilder.html#method.set_connect_timeout
+    pub fn set_connect_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
+        self.inner.set_connect_timeout(timeout);
+        self
+    }
+
+    ///Sets read timeout on internal `TcpStream` instance
+    ///
+    ///The timeout is forwarded to
+    ///[`RequestBuilder::set_read_timeout`][RequestBuilder::set_read_timeout].
+    ///
+    ///[RequestBuilder::set_read_timeout]: struct.RequestBuilder.html#method.set_read_timeout
+    pub fn set_read_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
+        self.inner.set_read_timeout(timeout);
+        self
+    }
+
+    ///Sets write timeout on internal `TcpStream` instance
+    ///
+    ///The timeout is forwarded to
+    ///[`RequestBuilder::set_write_timeout`][RequestBuilder::set_write_timeout].
+    ///
+    ///[RequestBuilder::set_write_timeout]: struct.RequestBuilder.html#method.set_write_timeout
+    pub fn set_write_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
+        self.inner.set_write_timeout(timeout);
+        self
+    }
+
     ///Sends HTTP request.
     ///
     ///Creates `TcpStream` (and wraps it with `TlsStream` if needed). Writes request message
     ///to created stream. Returns response for this request. Writes response's body to `writer`.
     pub fn send<T: Write>(&self, writer: &mut T) -> Result<Response, error::Error> {
-        let mut stream = TcpStream::connect((
-            self.inner.uri.host().unwrap_or(""),
-            self.inner.uri.corr_port(),
-        ))?;
+        let host = self.inner.uri.host().unwrap_or("");
+        let port = self.inner.uri.corr_port();
+        let mut stream = match self.inner.connect_timeout {
+            Some(timeout) => connect_timeout(host, port, timeout)?,
+            None => TcpStream::connect((host, port))?,
+        };
+
+        //Duration implements Copy trait, so does Option<Duration>
+        stream.set_read_timeout(self.inner.read_timeout)?;
+        stream.set_write_timeout(self.inner.write_timeout)?;
 
         if self.inner.uri.scheme() == "https" {
             let mut stream =
@@ -261,6 +350,31 @@ impl<'a> Request<'a> {
             self.inner.send(&mut stream, writer)
         }
     }
+
+}
+
+///Connects to target host with a timeout
+fn connect_timeout<'a>(host: &'a str, port: u16, timeout: Duration) -> io::Result<TcpStream> {
+    use std::net::ToSocketAddrs;
+
+    let addrs: Vec<_> = format!("{}:{}", host, port).to_socket_addrs()?.collect();
+    let count = addrs.len();
+    for (idx, addr) in addrs.into_iter().enumerate() {
+        match TcpStream::connect_timeout(&addr, timeout) {
+            Ok(stream) => return Ok(stream),
+            Err(err) => match err.kind() {
+                io::ErrorKind::TimedOut => return Err(err),
+                _ => match idx + 1 == count {
+                    true => return Err(err),
+                    false => continue,
+                },
+            },
+        };
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::AddrNotAvailable, format!("Could not resolve address for {:?}", host)
+    ))
 }
 
 ///Creates and sends GET request. Returns response for this request.
@@ -285,7 +399,10 @@ pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::response::StatusCode;
+    use crate::{
+        error::Error,
+        response::StatusCode,
+    };
     use std::io::Cursor;
 
     const UNSUCCESS_CODE: StatusCode = StatusCode::new(400);
@@ -484,6 +601,16 @@ mod tests {
         let res = Request::new(&uri).send(&mut writer).unwrap();
 
         assert_ne!(res.status_code(), UNSUCCESS_CODE);
+    }
+
+    #[test]
+    fn request_send_timed_out() {
+        let uri = URI.parse().unwrap();
+        let err = Request::new(&uri).set_connect_timeout(Some(Duration::from_nanos(1))).send(&mut io::sink()).unwrap_err();
+        match err {
+            Error::IO(err) => assert_eq!(err.kind(), io::ErrorKind::TimedOut),
+            other => panic!("Expected error to be io::Error, got: {:?}", other),
+        };
     }
 
     #[ignore]
