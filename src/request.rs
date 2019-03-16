@@ -8,7 +8,7 @@ use crate::{
 use std::{
     fmt,
     io::{self, Read, Write},
-    net::TcpStream,
+    net::{TcpStream, ToSocketAddrs},
     time::Duration,
 };
 
@@ -132,10 +132,11 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
-    ///Sends HTTP request.
+    ///Sends HTTP request in these steps:
     ///
-    ///Writes request message to `stream`. Returns response for this request.
-    ///Writes response's body to `writer`.
+    ///- Writes request message to `stream`.
+    ///- Writes response's body to `writer`.
+    ///- Returns response for this request.
     pub fn send<T, U>(&self, stream: &mut T, writer: &mut U) -> Result<Response, error::Error>
     where
         T: Write + Read,
@@ -151,7 +152,7 @@ impl<'a> RequestBuilder<'a> {
         Ok(res)
     }
 
-    ///Writes message to `stream` and flashes it
+    ///Writes message to `stream` and flushes it
     pub fn write_msg<T, U>(&self, stream: &mut T, msg: &U) -> Result<(), io::Error>
     where
         T: Write,
@@ -321,19 +322,16 @@ impl<'a> Request<'a> {
 }
 
 ///Connects to target host with a timeout
-fn connect_timeout<'a>(host: &'a str, port: u16, timeout: Duration) -> io::Result<TcpStream> {
-    use std::net::ToSocketAddrs;
-
-    let addrs: Vec<_> = format!("{}:{}", host, port).to_socket_addrs()?.collect();
+fn connect_timeout(host: &str, port: u16, timeout: Duration) -> io::Result<TcpStream> {
+    let addrs: Vec<_> = (host, port).to_socket_addrs()?.collect();
     let count = addrs.len();
     for (idx, addr) in addrs.into_iter().enumerate() {
         match TcpStream::connect_timeout(&addr, timeout) {
             Ok(stream) => return Ok(stream),
             Err(err) => match err.kind() {
                 io::ErrorKind::TimedOut => return Err(err),
-                _ => match idx + 1 == count {
-                    true => return Err(err),
-                    false => continue,
+                _ => if idx + 1 == count {
+                    return Err(err);
                 },
             },
         };
@@ -571,13 +569,47 @@ mod tests {
     }
 
     #[test]
-    fn request_send_timed_out() {
+    fn request_connect_timeout() {
         let uri = URI.parse().unwrap();
-        let err = Request::new(&uri).set_connect_timeout(Some(Duration::from_nanos(1))).send(&mut io::sink()).unwrap_err();
+
+        let mut request = Request::new(&uri);
+        request.set_connect_timeout(Some(Duration::from_nanos(1)));
+        assert_eq!(request.connect_timeout, Some(Duration::from_nanos(1)));
+
+        let err = request.send(&mut io::sink()).unwrap_err();
         match err {
             Error::IO(err) => assert_eq!(err.kind(), io::ErrorKind::TimedOut),
             other => panic!("Expected error to be io::Error, got: {:?}", other),
         };
+    }
+
+    #[test]
+    fn request_read_timeout() {
+        let uri = URI.parse().unwrap();
+
+        let mut request = Request::new(&uri);
+        request.set_read_timeout(Some(Duration::from_nanos(1)));
+        assert_eq!(request.read_timeout, Some(Duration::from_nanos(1)));
+
+        let err = request.send(&mut io::sink()).unwrap_err();
+        match err {
+            Error::IO(err) => match err.kind() {
+                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => {},
+                other => panic!(
+                    "Expected error kind to be one of WouldBlock/TimedOut, got: {:?}",
+                    other
+                ),
+            },
+            other => panic!("Expected error to be io::Error, got: {:?}", other),
+        };
+    }
+
+    #[test]
+    fn request_write_timeout() {
+        let uri = URI.parse().unwrap();
+        let mut request = Request::new(&uri);
+        request.set_write_timeout(Some(Duration::from_nanos(100)));
+        assert_eq!(request.write_timeout, Some(Duration::from_nanos(100)));
     }
 
     #[ignore]
