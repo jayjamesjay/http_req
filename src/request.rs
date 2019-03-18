@@ -8,7 +8,8 @@ use crate::{
 use std::{
     fmt,
     io::{self, Read, Write},
-    net::TcpStream,
+    net::{TcpStream, ToSocketAddrs},
+    time::Duration,
 };
 
 const CR_LF: &str = "\r\n";
@@ -131,10 +132,11 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
-    ///Sends HTTP request.
+    ///Sends HTTP request in these steps:
     ///
-    ///Writes request message to `stream`. Returns response for this request.
-    ///Writes response's body to `writer`.
+    ///- Writes request message to `stream`.
+    ///- Writes response's body to `writer`.
+    ///- Returns response for this request.
     pub fn send<T, U>(&self, stream: &mut T, writer: &mut U) -> Result<Response, error::Error>
     where
         T: Write + Read,
@@ -150,7 +152,7 @@ impl<'a> RequestBuilder<'a> {
         Ok(res)
     }
 
-    ///Writes message to `stream` and flashes it
+    ///Writes message to `stream` and flushes it
     pub fn write_msg<T, U>(&self, stream: &mut T, msg: &U) -> Result<(), io::Error>
     where
         T: Write,
@@ -200,9 +202,18 @@ impl<'a> RequestBuilder<'a> {
 ///
 ///It creates stream (`TcpStream` or `TlsStream`) appropriate for the type of uri (`http`/`https`)
 ///By default it closes connection after completion of the response.
+///
+///About timeouts:
+///
+///- Default timeout for starting connection is 1 minute.
+///- On Linux, `man 7 socket` says that read/write timeouts default to zero, which means
+///  the operations will _never_ time out. However, default value for this builder is 1 minute each.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Request<'a> {
     inner: RequestBuilder<'a>,
+    connect_timeout: Option<Duration>,
+    read_timeout: Option<Duration>,
+    write_timeout: Option<Duration>,
 }
 
 impl<'a> Request<'a> {
@@ -211,7 +222,12 @@ impl<'a> Request<'a> {
         let mut builder = RequestBuilder::new(&uri);
         builder.header("Connection", "Close");
 
-        Request { inner: builder }
+        Request {
+            inner: builder,
+            connect_timeout: Some(Duration::from_secs(60)),
+            read_timeout: Some(Duration::from_secs(60)),
+            write_timeout: Some(Duration::from_secs(60)),
+        }
     }
 
     ///Replaces all it's headers with headers passed to the function
@@ -243,15 +259,56 @@ impl<'a> Request<'a> {
         self.inner.method(method);
     }
 
+    ///Sets connect timeout while using internal `TcpStream` instance
+    ///
+    ///- If there is a timeout, it will be passed to
+    ///  [`TcpStream::connect_timeout`][TcpStream::connect_timeout].
+    ///- If `None` is provided, [`TcpStream::connect`][TcpStream::connect] will
+    ///  be used, and it will _not_ time out.
+    ///
+    ///[TcpStream::connect]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect
+    ///[TcpStream::connect_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect_timeout
+    pub fn set_connect_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
+        self.connect_timeout = timeout;
+        self
+    }
+
+    ///Sets read timeout on internal `TcpStream` instance
+    ///
+    ///`timeout` will be passed to
+    ///[`TcpStream::set_read_timeout`][TcpStream::set_read_timeout].
+    ///
+    ///[TcpStream::set_read_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_read_timeout
+    pub fn set_read_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
+        self.read_timeout = timeout;
+        self
+    }
+
+    ///Sets write timeout on internal `TcpStream` instance
+    ///
+    ///`timeout` will be passed to
+    ///[`TcpStream::set_write_timeout`][TcpStream::set_write_timeout].
+    ///
+    ///[TcpStream::set_write_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_write_timeout
+    pub fn set_write_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
+        self.write_timeout = timeout;
+        self
+    }
+
     ///Sends HTTP request.
     ///
     ///Creates `TcpStream` (and wraps it with `TlsStream` if needed). Writes request message
     ///to created stream. Returns response for this request. Writes response's body to `writer`.
     pub fn send<T: Write>(&self, writer: &mut T) -> Result<Response, error::Error> {
-        let mut stream = TcpStream::connect((
-            self.inner.uri.host().unwrap_or(""),
-            self.inner.uri.corr_port(),
-        ))?;
+        let host = self.inner.uri.host().unwrap_or("");
+        let port = self.inner.uri.corr_port();
+        let mut stream = match self.connect_timeout {
+            Some(timeout) => connect_timeout(host, port, timeout)?,
+            None => TcpStream::connect((host, port))?,
+        };
+
+        stream.set_read_timeout(self.read_timeout)?;
+        stream.set_write_timeout(self.write_timeout)?;
 
         if self.inner.uri.scheme() == "https" {
             let mut stream =
@@ -261,6 +318,28 @@ impl<'a> Request<'a> {
             self.inner.send(&mut stream, writer)
         }
     }
+
+}
+
+///Connects to target host with a timeout
+fn connect_timeout(host: &str, port: u16, timeout: Duration) -> io::Result<TcpStream> {
+    let addrs: Vec<_> = (host, port).to_socket_addrs()?.collect();
+    let count = addrs.len();
+    for (idx, addr) in addrs.into_iter().enumerate() {
+        match TcpStream::connect_timeout(&addr, timeout) {
+            Ok(stream) => return Ok(stream),
+            Err(err) => match err.kind() {
+                io::ErrorKind::TimedOut => return Err(err),
+                _ => if idx + 1 == count {
+                    return Err(err);
+                },
+            },
+        };
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::AddrNotAvailable, format!("Could not resolve address for {:?}", host)
+    ))
 }
 
 ///Creates and sends GET request. Returns response for this request.
@@ -285,7 +364,10 @@ pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::response::StatusCode;
+    use crate::{
+        error::Error,
+        response::StatusCode,
+    };
     use std::io::Cursor;
 
     const UNSUCCESS_CODE: StatusCode = StatusCode::new(400);
@@ -484,6 +566,50 @@ mod tests {
         let res = Request::new(&uri).send(&mut writer).unwrap();
 
         assert_ne!(res.status_code(), UNSUCCESS_CODE);
+    }
+
+    #[test]
+    fn request_connect_timeout() {
+        let uri = URI.parse().unwrap();
+
+        let mut request = Request::new(&uri);
+        request.set_connect_timeout(Some(Duration::from_nanos(1)));
+        assert_eq!(request.connect_timeout, Some(Duration::from_nanos(1)));
+
+        let err = request.send(&mut io::sink()).unwrap_err();
+        match err {
+            Error::IO(err) => assert_eq!(err.kind(), io::ErrorKind::TimedOut),
+            other => panic!("Expected error to be io::Error, got: {:?}", other),
+        };
+    }
+
+    #[test]
+    fn request_read_timeout() {
+        let uri = URI.parse().unwrap();
+
+        let mut request = Request::new(&uri);
+        request.set_read_timeout(Some(Duration::from_nanos(1)));
+        assert_eq!(request.read_timeout, Some(Duration::from_nanos(1)));
+
+        let err = request.send(&mut io::sink()).unwrap_err();
+        match err {
+            Error::IO(err) => match err.kind() {
+                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => {},
+                other => panic!(
+                    "Expected error kind to be one of WouldBlock/TimedOut, got: {:?}",
+                    other
+                ),
+            },
+            other => panic!("Expected error to be io::Error, got: {:?}", other),
+        };
+    }
+
+    #[test]
+    fn request_write_timeout() {
+        let uri = URI.parse().unwrap();
+        let mut request = Request::new(&uri);
+        request.set_write_timeout(Some(Duration::from_nanos(100)));
+        assert_eq!(request.write_timeout, Some(Duration::from_nanos(100)));
     }
 
     #[ignore]
