@@ -203,11 +203,25 @@ impl<'a> RequestBuilder<'a> {
 ///It creates stream (`TcpStream` or `TlsStream`) appropriate for the type of uri (`http`/`https`)
 ///By default it closes connection after completion of the response.
 ///
-///About timeouts:
+///# About timeouts:
 ///
 ///- Default timeout for starting connection is 1 minute.
 ///- On Linux, `man 7 socket` says that read/write timeouts default to zero, which means
 ///  the operations will _never_ time out. However, default value for this builder is 1 minute each.
+///
+///# Examples
+///```
+///use http_req::{request::Request, uri::Uri, response::StatusCode};
+///
+///let mut writer = Vec::new();
+///let uri: Uri = "https://doc.rust-lang.org/".parse().unwrap();
+///
+///let mut  req = Request::new(&uri);
+///let res = req.send(&mut writer).unwrap();
+///
+///assert_eq!(res.status_code(), StatusCode::new(200));
+///```
+///
 #[derive(Clone, Debug, PartialEq)]
 pub struct Request<'a> {
     inner: RequestBuilder<'a>,
@@ -318,27 +332,30 @@ impl<'a> Request<'a> {
             self.inner.send(&mut stream, writer)
         }
     }
-
 }
 
 ///Connects to target host with a timeout
 fn connect_timeout(host: &str, port: u16, timeout: Duration) -> io::Result<TcpStream> {
     let addrs: Vec<_> = (host, port).to_socket_addrs()?.collect();
     let count = addrs.len();
+
     for (idx, addr) in addrs.into_iter().enumerate() {
         match TcpStream::connect_timeout(&addr, timeout) {
             Ok(stream) => return Ok(stream),
             Err(err) => match err.kind() {
                 io::ErrorKind::TimedOut => return Err(err),
-                _ => if idx + 1 == count {
-                    return Err(err);
-                },
+                _ => {
+                    if idx + 1 == count {
+                        return Err(err);
+                    }
+                }
             },
         };
     }
 
     Err(io::Error::new(
-        io::ErrorKind::AddrNotAvailable, format!("Could not resolve address for {:?}", host)
+        io::ErrorKind::AddrNotAvailable,
+        format!("Could not resolve address for {:?}", host),
     ))
 }
 
@@ -364,10 +381,7 @@ pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        error::Error,
-        response::StatusCode,
-    };
+    use crate::{error::Error, response::StatusCode};
     use std::io::Cursor;
 
     const UNSUCCESS_CODE: StatusCode = StatusCode::new(400);
@@ -594,7 +608,7 @@ mod tests {
         let err = request.send(&mut io::sink()).unwrap_err();
         match err {
             Error::IO(err) => match err.kind() {
-                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => {},
+                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => {}
                 other => panic!(
                     "Expected error kind to be one of WouldBlock/TimedOut, got: {:?}",
                     other

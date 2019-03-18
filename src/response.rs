@@ -132,12 +132,10 @@ impl str::FromStr for Status {
 ///```
 ///use http_req::response::Headers;
 ///
-///fn main() {
-///   let mut headers = Headers::new();
-///   headers.insert("Connection", "Close");
+///let mut headers = Headers::new();
+///headers.insert("Connection", "Close");
 ///
-///   assert_eq!(headers.get("Connection"), Some(&"Close".to_string()))
-///}
+///assert_eq!(headers.get("Connection"), Some(&"Close".to_string()))
 ///```
 pub struct Headers(HashMap<String, String>);
 
@@ -235,11 +233,8 @@ impl From<Headers> for HashMap<String, String> {
 ///```
 ///use http_req::response::StatusCode;
 ///
-///fn main() {
-///   let code = StatusCode::from(200);
-///
-///   assert!(code.is_success())
-///}
+///let code = StatusCode::from(200);
+///assert!(code.is_success())
 ///```
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct StatusCode(u16);
