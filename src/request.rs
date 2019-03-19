@@ -266,6 +266,16 @@ impl<'a> Request<'a> {
     }
 
     ///Changes request's method
+    pub fn method<T>(&mut self, method: T) -> &mut Self
+    where
+        Method: From<T>,
+    {
+        self.inner.method(method);
+
+        self
+    }
+
+    ///Changes request's method
     pub fn set_method<T>(&mut self, method: T)
     where
         Method: From<T>,
