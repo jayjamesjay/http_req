@@ -283,6 +283,13 @@ impl<'a> Request<'a> {
         self.inner.method(method);
     }
 
+    ///Sets body for request
+    pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
+        self.inner.body(body);
+
+        self
+    }
+
     ///Sets connect timeout while using internal `TcpStream` instance
     ///
     ///- If there is a timeout, it will be passed to
