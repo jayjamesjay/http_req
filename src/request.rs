@@ -77,6 +77,27 @@ impl fmt::Display for Method {
 ///
 ///It can work with any stream that implements `Read` and `Write`.
 ///By default it does not close the connection after completion of the response.
+///
+///# Examples
+///```
+///use std::net::TcpStream;
+///use http_req::{request::RequestBuilder, tls, uri::Uri, response::StatusCode};
+///
+///let addr: Uri = "https://doc.rust-lang.org/".parse().unwrap();
+///let mut writer = Vec::new();
+///
+///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+///let mut stream = tls::Config::default()
+///    .connect(addr.host().unwrap_or(""), stream)
+///    .unwrap();
+///
+///let response = RequestBuilder::new(&addr)
+///    .header("Connection", "Close")
+///    .send(&mut stream, &mut writer)
+///    .unwrap();
+///
+///assert_eq!(response.status_code(), StatusCode::new(200));
+///```
 #[derive(Clone, Debug, PartialEq)]
 pub struct RequestBuilder<'a> {
     uri: &'a Uri,
@@ -169,7 +190,7 @@ impl<'a> RequestBuilder<'a> {
         let mut head = Vec::with_capacity(200);
         copy_until(stream, &mut head, &CR_LF_2)?;
 
-        Response::from_head(&head)
+        Ok(Response::from_head(&head)?)
     }
 
     ///Parses request message for this `RequestBuilder`
@@ -216,10 +237,9 @@ impl<'a> RequestBuilder<'a> {
 ///let mut writer = Vec::new();
 ///let uri: Uri = "https://doc.rust-lang.org/".parse().unwrap();
 ///
-///let mut  req = Request::new(&uri);
-///let res = req.send(&mut writer).unwrap();
+///let mut response = Request::new(&uri).send(&mut writer).unwrap();;
 ///
-///assert_eq!(res.status_code(), StatusCode::new(200));
+///assert_eq!(response.status_code(), StatusCode::new(200));
 ///```
 ///
 #[derive(Clone, Debug, PartialEq)]
@@ -299,8 +319,11 @@ impl<'a> Request<'a> {
     ///
     ///[TcpStream::connect]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect
     ///[TcpStream::connect_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect_timeout
-    pub fn connect_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.connect_timeout = timeout;
+    pub fn connect_timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
+    where
+        Duration: From<T>,
+    {
+        self.connect_timeout = timeout.map(|v| Duration::from(v));
         self
     }
 
@@ -315,8 +338,11 @@ impl<'a> Request<'a> {
     ///[`TcpStream::set_read_timeout`][TcpStream::set_read_timeout].
     ///
     ///[TcpStream::set_read_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_read_timeout
-    pub fn read_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.read_timeout = timeout;
+    pub fn read_timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
+    where
+        Duration: From<T>,
+    {
+        self.read_timeout = timeout.map(|v| Duration::from(v));
         self
     }
 
@@ -331,8 +357,11 @@ impl<'a> Request<'a> {
     ///[`TcpStream::set_write_timeout`][TcpStream::set_write_timeout].
     ///
     ///[TcpStream::set_write_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_write_timeout
-    pub fn write_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.write_timeout = timeout;
+    pub fn write_timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
+    where
+        Duration: From<T>,
+    {
+        self.write_timeout = timeout.map(|v| Duration::from(v));
         self
     }
 
@@ -615,7 +644,7 @@ mod tests {
         let uri = URI.parse().unwrap();
         let mut request = Request::new(&uri);
         request.connect_timeout(Some(Duration::from_nanos(1)));
-        
+
         assert_eq!(request.connect_timeout, Some(Duration::from_nanos(1)));
 
         let err = request.send(&mut io::sink()).unwrap_err();

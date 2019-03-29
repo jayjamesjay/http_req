@@ -10,7 +10,7 @@ fn main() {
 
     //Open secure connection over TlsStream, because of `addr` (https)
     let mut stream = tls::Config::default()
-        .connect(addr.host().unwrap(), stream)
+        .connect(addr.host().unwrap_or(""), stream)
         .unwrap();
 
     //Container for response's body
