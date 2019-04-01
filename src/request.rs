@@ -323,7 +323,7 @@ impl<'a> Request<'a> {
     where
         Duration: From<T>,
     {
-        self.connect_timeout = timeout.map(|v| Duration::from(v));
+        self.connect_timeout = timeout.map(Duration::from);
         self
     }
 
@@ -342,7 +342,7 @@ impl<'a> Request<'a> {
     where
         Duration: From<T>,
     {
-        self.read_timeout = timeout.map(|v| Duration::from(v));
+        self.read_timeout = timeout.map(Duration::from);
         self
     }
 
@@ -361,7 +361,7 @@ impl<'a> Request<'a> {
     where
         Duration: From<T>,
     {
-        self.write_timeout = timeout.map(|v| Duration::from(v));
+        self.write_timeout = timeout.map(Duration::from);
         self
     }
 
@@ -386,8 +386,7 @@ impl<'a> Request<'a> {
         stream.set_write_timeout(self.write_timeout)?;
 
         if self.inner.uri.scheme() == "https" {
-            let mut stream =
-                tls::Config::default().connect(self.inner.uri.host().unwrap_or(""), stream)?;
+            let mut stream = tls::Config::default().connect(host, stream)?;
             self.inner.send(&mut stream, writer)
         } else {
             self.inner.send(&mut stream, writer)
@@ -396,7 +395,13 @@ impl<'a> Request<'a> {
 }
 
 ///Connects to target host with a timeout
-fn connect_timeout(host: &str, port: u16, timeout: Duration) -> io::Result<TcpStream> {
+pub fn connect_timeout<T, U>(host: T, port: u16, timeout: U) -> io::Result<TcpStream>
+where
+    Duration: From<U>,
+    T: AsRef<str>,
+{
+    let host = host.as_ref();
+    let timeout = Duration::from(timeout);
     let addrs: Vec<_> = (host, port).to_socket_addrs()?.collect();
     let count = addrs.len();
 

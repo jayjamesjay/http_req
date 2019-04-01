@@ -23,7 +23,7 @@ pub struct Response {
 
 impl Response {
     ///Creates new `Response` with head - status and headers - parsed from a slice of bytes
-    pub fn from_head(head: &[u8]) -> Result<Response, ParseErr> {
+    pub fn from_head(head: &[u8]) -> Result<Response, Error> {
         let mut head = str::from_utf8(head)?.splitn(2, '\n');
 
         let status = head.next().ok_or(ParseErr::Invalid)?.parse()?;
