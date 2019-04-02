@@ -32,6 +32,13 @@ impl Response {
         Ok(Response { status, headers })
     }
 
+    #[deprecated(note = "Please use the from_head instead")]
+    pub fn parse_head(head: &[u8]) -> Result<(Status, Headers), ParseErr> {
+        let head = Self::from_head(head).map_err(|_| ParseErr::Invalid)?;
+
+        Ok((head.status, head.headers))
+    }
+
     ///Parses `Response` from slice of bytes. Writes it's body to `writer`.
     pub fn try_from<T: Write>(res: &[u8], writer: &mut T) -> Result<Response, Error> {
         if res.is_empty() {

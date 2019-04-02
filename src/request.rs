@@ -190,7 +190,7 @@ impl<'a> RequestBuilder<'a> {
         let mut head = Vec::with_capacity(200);
         copy_until(stream, &mut head, &CR_LF_2)?;
 
-        Ok(Response::from_head(&head)?)
+        Response::from_head(&head)
     }
 
     ///Parses request message for this `RequestBuilder`
