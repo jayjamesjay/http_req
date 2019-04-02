@@ -24,9 +24,19 @@ pub struct Response {
 impl Response {
     ///Creates new `Response` with head - status and headers - parsed from a slice of bytes
     pub fn from_head(head: &[u8]) -> Result<Response, Error> {
-        let (status, headers) = Self::parse_head(head)?;
+        let mut head = str::from_utf8(head)?.splitn(2, '\n');
+
+        let status = head.next().ok_or(ParseErr::Invalid)?.parse()?;
+        let headers = head.next().ok_or(ParseErr::Invalid)?.parse()?;
 
         Ok(Response { status, headers })
+    }
+
+    #[deprecated(note = "Please use the from_head instead")]
+    pub fn parse_head(head: &[u8]) -> Result<(Status, Headers), ParseErr> {
+        let head = Self::from_head(head).map_err(|_| ParseErr::Invalid)?;
+
+        Ok((head.status, head.headers))
     }
 
     ///Parses `Response` from slice of bytes. Writes it's body to `writer`.
@@ -44,16 +54,6 @@ impl Response {
 
             Ok(response)
         }
-    }
-
-    ///Parses head of a `Response` - status and headers - from slice of bytes.
-    pub fn parse_head(head: &[u8]) -> Result<(Status, Headers), ParseErr> {
-        let mut head = str::from_utf8(head)?.splitn(2, '\n');
-
-        let status = head.next().ok_or(ParseErr::Invalid)?.parse()?;
-        let headers = head.next().ok_or(ParseErr::Invalid)?.parse()?;
-
-        Ok((status, headers))
     }
 
     ///Returns status code of this `Response`.
@@ -125,7 +125,6 @@ impl str::FromStr for Status {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Default)]
 ///Wrapper around HashMap<String, String> with additional functionality for parsing HTTP headers
 ///
 ///# Example
@@ -137,6 +136,7 @@ impl str::FromStr for Status {
 ///
 ///assert_eq!(headers.get("Connection"), Some(&"Close".to_string()))
 ///```
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct Headers(HashMap<String, String>);
 
 impl Headers {
@@ -642,19 +642,6 @@ mod tests {
     fn res_from_empty() {
         let mut writer = Vec::new();
         Response::try_from(&[], &mut writer).unwrap();
-    }
-
-    #[test]
-    fn res_parse_head() {
-        let mut headers = Headers::with_capacity(4);
-        headers.insert("Date", "Sat, 11 Jan 2003 02:44:04 GMT");
-        headers.insert("Content-Type", "text/html");
-        headers.insert("Content-Length", "100");
-
-        let head = Response::parse_head(RESPONSE_H).unwrap();
-
-        assert_eq!(head.0, Status::from((VERSION, CODE, REASON)));
-        assert_eq!(head.1, Headers::from(headers));
     }
 
     #[test]

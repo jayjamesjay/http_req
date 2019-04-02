@@ -90,3 +90,9 @@ impl From<ParseErr> for Error {
         Error::Parse(e)
     }
 }
+
+impl From<str::Utf8Error> for Error {
+    fn from(e: str::Utf8Error) -> Self {
+        Error::Parse(ParseErr::Utf8(e))
+    }
+}

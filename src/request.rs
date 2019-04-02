@@ -77,6 +77,27 @@ impl fmt::Display for Method {
 ///
 ///It can work with any stream that implements `Read` and `Write`.
 ///By default it does not close the connection after completion of the response.
+///
+///# Examples
+///```
+///use std::net::TcpStream;
+///use http_req::{request::RequestBuilder, tls, uri::Uri, response::StatusCode};
+///
+///let addr: Uri = "https://doc.rust-lang.org/".parse().unwrap();
+///let mut writer = Vec::new();
+///
+///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+///let mut stream = tls::Config::default()
+///    .connect(addr.host().unwrap_or(""), stream)
+///    .unwrap();
+///
+///let response = RequestBuilder::new(&addr)
+///    .header("Connection", "Close")
+///    .send(&mut stream, &mut writer)
+///    .unwrap();
+///
+///assert_eq!(response.status_code(), StatusCode::new(200));
+///```
 #[derive(Clone, Debug, PartialEq)]
 pub struct RequestBuilder<'a> {
     uri: &'a Uri,
@@ -216,10 +237,9 @@ impl<'a> RequestBuilder<'a> {
 ///let mut writer = Vec::new();
 ///let uri: Uri = "https://doc.rust-lang.org/".parse().unwrap();
 ///
-///let mut  req = Request::new(&uri);
-///let res = req.send(&mut writer).unwrap();
+///let mut response = Request::new(&uri).send(&mut writer).unwrap();;
 ///
-///assert_eq!(res.status_code(), StatusCode::new(200));
+///assert_eq!(response.status_code(), StatusCode::new(200));
 ///```
 ///
 #[derive(Clone, Debug, PartialEq)]
@@ -266,11 +286,28 @@ impl<'a> Request<'a> {
     }
 
     ///Changes request's method
+    pub fn method<T>(&mut self, method: T) -> &mut Self
+    where
+        Method: From<T>,
+    {
+        self.inner.method(method);
+
+        self
+    }
+
+    #[deprecated(note = "Please use method instead")]
     pub fn set_method<T>(&mut self, method: T)
     where
         Method: From<T>,
     {
         self.inner.method(method);
+    }
+
+    ///Sets body for request
+    pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
+        self.inner.body(body);
+
+        self
     }
 
     ///Sets connect timeout while using internal `TcpStream` instance
@@ -282,9 +319,17 @@ impl<'a> Request<'a> {
     ///
     ///[TcpStream::connect]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect
     ///[TcpStream::connect_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect_timeout
-    pub fn set_connect_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.connect_timeout = timeout;
+    pub fn connect_timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
+    where
+        Duration: From<T>,
+    {
+        self.connect_timeout = timeout.map(Duration::from);
         self
+    }
+
+    #[deprecated(note = "Please use the read_timeout instead")]
+    pub fn set_connect_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
+        self.connect_timeout(timeout)
     }
 
     ///Sets read timeout on internal `TcpStream` instance
@@ -293,9 +338,17 @@ impl<'a> Request<'a> {
     ///[`TcpStream::set_read_timeout`][TcpStream::set_read_timeout].
     ///
     ///[TcpStream::set_read_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_read_timeout
-    pub fn set_read_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.read_timeout = timeout;
+    pub fn read_timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
+    where
+        Duration: From<T>,
+    {
+        self.read_timeout = timeout.map(Duration::from);
         self
+    }
+
+    #[deprecated(note = "Please use the read_timeout instead")]
+    pub fn set_read_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
+        self.read_timeout(timeout)
     }
 
     ///Sets write timeout on internal `TcpStream` instance
@@ -304,9 +357,17 @@ impl<'a> Request<'a> {
     ///[`TcpStream::set_write_timeout`][TcpStream::set_write_timeout].
     ///
     ///[TcpStream::set_write_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_write_timeout
-    pub fn set_write_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.write_timeout = timeout;
+    pub fn write_timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
+    where
+        Duration: From<T>,
+    {
+        self.write_timeout = timeout.map(Duration::from);
         self
+    }
+
+    #[deprecated(note = "Please use the write_timeout instead")]
+    pub fn set_write_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
+        self.write_timeout(timeout)
     }
 
     ///Sends HTTP request.
@@ -325,8 +386,7 @@ impl<'a> Request<'a> {
         stream.set_write_timeout(self.write_timeout)?;
 
         if self.inner.uri.scheme() == "https" {
-            let mut stream =
-                tls::Config::default().connect(self.inner.uri.host().unwrap_or(""), stream)?;
+            let mut stream = tls::Config::default().connect(host, stream)?;
             self.inner.send(&mut stream, writer)
         } else {
             self.inner.send(&mut stream, writer)
@@ -335,7 +395,13 @@ impl<'a> Request<'a> {
 }
 
 ///Connects to target host with a timeout
-fn connect_timeout(host: &str, port: u16, timeout: Duration) -> io::Result<TcpStream> {
+pub fn connect_timeout<T, U>(host: T, port: u16, timeout: U) -> io::Result<TcpStream>
+where
+    Duration: From<U>,
+    T: AsRef<str>,
+{
+    let host = host.as_ref();
+    let timeout = Duration::from(timeout);
     let addrs: Vec<_> = (host, port).to_socket_addrs()?.collect();
     let count = addrs.len();
 
@@ -372,10 +438,7 @@ pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
     let mut writer = Vec::new();
     let uri = uri.as_ref().parse::<Uri>()?;
 
-    let mut request = Request::new(&uri);
-    request.set_method(Method::HEAD);
-
-    request.send(&mut writer)
+    Request::new(&uri).method(Method::HEAD).send(&mut writer)
 }
 
 #[cfg(test)]
@@ -534,7 +597,7 @@ mod tests {
     fn request_method() {
         let uri = URI.parse().unwrap();
         let mut req = Request::new(&uri);
-        req.set_method(Method::HEAD);
+        req.method(Method::HEAD);
 
         assert_eq!(req.inner.method, Method::HEAD);
     }
@@ -573,21 +636,20 @@ mod tests {
     }
 
     #[test]
-    fn request_send() {
-        let mut writer = Vec::new();
-
+    fn request_body() {
         let uri = URI.parse().unwrap();
-        let res = Request::new(&uri).send(&mut writer).unwrap();
+        let mut req = Request::new(&uri);
+        let req = req.body(&BODY);
 
-        assert_ne!(res.status_code(), UNSUCCESS_CODE);
+        assert_eq!(req.inner.body, Some(BODY.as_ref()));
     }
 
     #[test]
     fn request_connect_timeout() {
         let uri = URI.parse().unwrap();
-
         let mut request = Request::new(&uri);
-        request.set_connect_timeout(Some(Duration::from_nanos(1)));
+        request.connect_timeout(Some(Duration::from_nanos(1)));
+
         assert_eq!(request.connect_timeout, Some(Duration::from_nanos(1)));
 
         let err = request.send(&mut io::sink()).unwrap_err();
@@ -600,9 +662,9 @@ mod tests {
     #[test]
     fn request_read_timeout() {
         let uri = URI.parse().unwrap();
-
         let mut request = Request::new(&uri);
-        request.set_read_timeout(Some(Duration::from_nanos(1)));
+        request.read_timeout(Some(Duration::from_nanos(1)));
+
         assert_eq!(request.read_timeout, Some(Duration::from_nanos(1)));
 
         let err = request.send(&mut io::sink()).unwrap_err();
@@ -622,8 +684,18 @@ mod tests {
     fn request_write_timeout() {
         let uri = URI.parse().unwrap();
         let mut request = Request::new(&uri);
-        request.set_write_timeout(Some(Duration::from_nanos(100)));
+        request.write_timeout(Some(Duration::from_nanos(100)));
+
         assert_eq!(request.write_timeout, Some(Duration::from_nanos(100)));
+    }
+
+    #[test]
+    fn request_send() {
+        let mut writer = Vec::new();
+        let uri = URI.parse().unwrap();
+        let res = Request::new(&uri).send(&mut writer).unwrap();
+
+        assert_ne!(res.status_code(), UNSUCCESS_CODE);
     }
 
     #[ignore]
