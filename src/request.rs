@@ -265,6 +265,12 @@ impl<'a> Request<'a> {
         self
     }
 
+    ///Sets body for request
+    pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
+        self.inner.body(body);
+        self
+    }
+
     ///Changes request's method
     pub fn set_method<T>(&mut self, method: T)
     where
@@ -570,6 +576,15 @@ mod tests {
         let req = req.header(k, v);
 
         assert_eq!(req.inner.headers, expect_headers);
+    }
+
+    #[test]
+    fn request_body() {
+        let uri: Uri = URI.parse().unwrap();
+        let mut req = Request::new(&uri);
+        let req = req.body(&BODY);
+
+        assert_eq!(req.inner.body, Some(BODY.as_ref()));
     }
 
     #[test]
