@@ -9,6 +9,7 @@ use std::{
     io::Write,
     str,
 };
+use unicase::Ascii;
 
 pub(crate) const CR_LF_2: [u8; 4] = [13, 10, 13, 10];
 
@@ -137,7 +138,7 @@ impl str::FromStr for Status {
 ///assert_eq!(headers.get("Connection"), Some(&"Close".to_string()))
 ///```
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct Headers(HashMap<String, String>);
+pub struct Headers(HashMap<Ascii<String>, String>);
 
 impl Headers {
     ///Creates an empty `Headers`.
@@ -158,13 +159,13 @@ impl Headers {
 
     ///An iterator visiting all key-value pairs in arbitrary order.
     ///The iterator element type is (&String, &String).
-    pub fn iter(&self) -> hash_map::Iter<String, String> {
+    pub fn iter(&self) -> hash_map::Iter<Ascii<String>, String> {
         self.0.iter()
     }
 
     ///Returns a reference to the value corresponding to the key.
     pub fn get<T: ToString>(&self, k: T) -> Option<&std::string::String> {
-        self.0.get(&k.to_string())
+        self.0.get(&Ascii::new(k.to_string()))
     }
 
     ///Inserts a key-value pair into the headers.
@@ -178,7 +179,7 @@ impl Headers {
         T: ToString + ?Sized,
         U: ToString + ?Sized,
     {
-        self.0.insert(key.to_string(), val.to_string())
+        self.0.insert(Ascii::new(key.to_string()), val.to_string())
     }
 
     ///Creates default headers for a HTTP request
@@ -204,7 +205,7 @@ impl str::FromStr for Headers {
                 .map(|elem| {
                     let idx = elem.find(": ").unwrap();
                     let (key, value) = elem.split_at(idx);
-                    (key.to_string(), value[2..].to_string())
+                    (Ascii::new(key.to_string()), value[2..].to_string())
                 })
                 .collect();
 
@@ -215,14 +216,14 @@ impl str::FromStr for Headers {
     }
 }
 
-impl From<HashMap<String, String>> for Headers {
-    fn from(map: HashMap<String, String>) -> Headers {
+impl From<HashMap<Ascii<String>, String>> for Headers {
+    fn from(map: HashMap<Ascii<String>, String>) -> Headers {
         Headers(map)
     }
 }
 
-impl From<Headers> for HashMap<String, String> {
-    fn from(map: Headers) -> HashMap<String, String> {
+impl From<Headers> for HashMap<Ascii<String>, String> {
+    fn from(map: Headers) -> HashMap<Ascii<String>, String> {
         map.0
     }
 }
@@ -546,7 +547,7 @@ mod tests {
     #[test]
     fn headers_insert() {
         let mut headers_expect = HashMap::new();
-        headers_expect.insert("Connection".to_string(), "Close".to_string());
+        headers_expect.insert(Ascii::new("Connection".to_string()), "Close".to_string());
         let headers_expect = Headers(headers_expect);
 
         let mut headers = Headers::new();
@@ -572,11 +573,11 @@ mod tests {
     fn headers_from_str() {
         let mut headers_expect = HashMap::with_capacity(2);
         headers_expect.insert(
-            "Date".to_string(),
+            Ascii::new("Date".to_string()),
             "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
         );
-        headers_expect.insert("Content-Type".to_string(), "text/html".to_string());
-        headers_expect.insert("Content-Length".to_string(), "100".to_string());
+        headers_expect.insert(Ascii::new("Content-Type".to_string()), "text/html".to_string());
+        headers_expect.insert(Ascii::new("Content-Length".to_string()), "100".to_string());
 
         let headers = HEADERS.parse::<Headers>().unwrap();
         assert_eq!(headers, Headers::from(headers_expect));
@@ -586,16 +587,32 @@ mod tests {
     fn headers_from() {
         let mut headers_expect = HashMap::with_capacity(4);
         headers_expect.insert(
-            "Date".to_string(),
+            Ascii::new("Date".to_string()),
             "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
         );
-        headers_expect.insert("Content-Type".to_string(), "text/html".to_string());
-        headers_expect.insert("Content-Length".to_string(), "100".to_string());
+        headers_expect.insert(Ascii::new("Content-Type".to_string()), "text/html".to_string());
+        headers_expect.insert(Ascii::new("Content-Length".to_string()), "100".to_string());
 
         assert_eq!(
             Headers(headers_expect.clone()),
             Headers::from(headers_expect)
         );
+    }
+
+    #[test]
+    fn headers_case_insensitive() {
+        let header_names = [
+            "Host",
+            "host",
+            "HOST",
+            "HoSt",
+        ];
+        let mut headers = Headers::with_capacity(1);
+        headers.insert("Host", "doc.rust-lang.org");
+
+        for name in header_names.iter() {
+            assert_eq!(headers.get(name), Some(&"doc.rust-lang.org".to_string()));
+        }
     }
 
     #[test]
@@ -607,11 +624,11 @@ mod tests {
 
         let mut headers_expect = HashMap::with_capacity(4);
         headers_expect.insert(
-            "Date".to_string(),
+            Ascii::new("Date".to_string()),
             "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
         );
-        headers_expect.insert("Content-Type".to_string(), "text/html".to_string());
-        headers_expect.insert("Content-Length".to_string(), "100".to_string());
+        headers_expect.insert(Ascii::new("Content-Type".to_string()), "text/html".to_string());
+        headers_expect.insert(Ascii::new("Content-Length".to_string()), "100".to_string());
 
         assert_eq!(HashMap::from(headers), headers_expect);
     }
