@@ -14,6 +14,9 @@ edition = "2018"
 default = ["native-tls"]
 rust-tls = ["rustls", "webpki", "webpki-roots"]
 
+[dependencies]
+unicase = "^2.3"
+
 [dependencies.native-tls]
 version = "^0.2"
 optional = true

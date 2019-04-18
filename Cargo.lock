@@ -99,6 +99,7 @@ version = "0.4.7"
 dependencies = [
  "native-tls 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustls 0.15.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "unicase 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "webpki 0.19.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "webpki-roots 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -368,6 +369,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "unicase"
+version = "2.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "version_check 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "untrusted"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -375,6 +384,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "vcpkg"
 version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "version_check"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -458,8 +472,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum semver 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 "checksum semver-parser 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 "checksum tempfile 3.0.5 (registry+https://github.com/rust-lang/crates.io-index)" = "7e91405c14320e5c79b3d148e1c86f40749a36e490642202a31689cb1a3452b2"
+"checksum unicase 2.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "41d17211f887da8e4a70a45b9536f26fc5de166b81e2d5d80de4a17fd22553bd"
 "checksum untrusted 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)" = "55cd1f4b4e96b46aeb8d4855db4a7a9bd96eeeb5c6a1ab54593328761642ce2f"
 "checksum vcpkg 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "def296d3eb3b12371b2c7d0e83bfe1403e4db2d7a0bba324a12b21c4ee13143d"
+"checksum version_check 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)" = "914b1a6776c4c929a602fafd8bc742e06365d4bcbe48c30f9cca5824f70dc9dd"
 "checksum webpki 0.19.1 (registry+https://github.com/rust-lang/crates.io-index)" = "4f7e1cd7900a3a6b65a3e8780c51a3e6b59c0e2c55c6dc69578c288d69f7d082"
 "checksum webpki-roots 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c10fa4212003ba19a564f25cd8ab572c6791f99a03cc219c13ed35ccab00de0e"
 "checksum winapi 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)" = "92c1eb33641e276cfa214a0522acad57be5c56b10cb348b3c5117db75f3ac4b0"
