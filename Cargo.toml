@@ -1,6 +1,6 @@
 [package]
 name = "http_req"
-version = "0.4.7"
+version = "0.4.8"
 license = "MIT"
 description = "simple and lightweight HTTP client with built-in HTTPS support"
 repository = "https://github.com/jayjamesjay/http_req"
@@ -13,9 +13,6 @@ edition = "2018"
 [features]
 default = ["native-tls"]
 rust-tls = ["rustls", "webpki", "webpki-roots"]
-
-[dependencies]
-unicase = "^2.3"
 
 [dependencies.native-tls]
 version = "^0.2"
