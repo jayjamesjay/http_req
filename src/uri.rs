@@ -69,6 +69,21 @@ impl Uri {
         }
     }
 
+    ///Returns host of this `Uri` to use in a header.
+    pub fn host_header(&self) -> Option<String> {
+        match self.authority {
+            Some(ref a) => match (a.host(), a.port()) {
+                (Some(h), Some(p)) => Some(match *p {
+                    HTTP_PORT | HTTPS_PORT => h.to_string(),
+                    _ => format!("{}:{}", h, p),
+                }),
+                (Some(h), None) => Some(h.to_string()),
+                _ => None,
+            },
+            None => None,
+        }
+    }
+
     ///Returns port of this `Uri`
     pub fn port(&self) -> &Option<u16> {
         match &self.authority {
