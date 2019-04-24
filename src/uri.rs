@@ -1,6 +1,6 @@
 //! uri operations
 use crate::error::{Error, ParseErr};
-use std::{convert::AsRef, fmt, str};
+use std::{convert::AsRef, fmt, str, string::ToString};
 
 const HTTP_PORT: u16 = 80;
 const HTTPS_PORT: u16 = 443;
@@ -74,7 +74,7 @@ impl Uri {
         match self.host() {
             Some(h) => match self.corr_port() {
                 HTTP_PORT | HTTPS_PORT => Some(h.to_string()),
-                p @ _ => Some(format!("{}:{}", h, p)),
+                p => Some(format!("{}:{}", h, p)),
             },
             _ => None,
         }
@@ -183,13 +183,13 @@ impl str::FromStr for Uri {
         let path = if authority.is_some() {
             path.and_then(|v| Some(format!("/{}", v)))
         } else {
-            path.map(|s| s.to_string())
+            path.map(ToString::to_string)
         };
 
         let (query, fragment) = chunk(&uri_part, "#");
 
-        let query = query.map(|s| s.to_string());
-        let fragment = fragment.map(|s| s.to_string());
+        let query = query.map(ToString::to_string);
+        let fragment = fragment.map(ToString::to_string);
 
         Ok(Uri {
             scheme,
@@ -277,8 +277,8 @@ impl str::FromStr for Authority {
             let (info, part) = get_chunks(&s, "@");
 
             let (name, pass) = chunk(&info, ":");
-            username = name.map(|s| s.to_string());
-            password = pass.map(|s| s.to_string());
+            username = name.map(ToString::to_string);
+            password = pass.map(ToString::to_string);
 
             part
         } else {
@@ -287,7 +287,7 @@ impl str::FromStr for Authority {
 
         let (host, uri_part) = chunk(&uri_part, ":");
 
-        let host = host.map(|s| s.to_string());
+        let host = host.map(ToString::to_string);
         let port = match uri_part {
             Some(p) => Some(p.parse()?),
             None => None,
@@ -441,7 +441,7 @@ mod tests {
         assert_eq!(uris[2].host(), Some("en.wikipedia.org"));
         assert_eq!(uris[3].host(), None);
     }
-    
+
     #[test]
     fn uri_host_header() {
         let uri_def: Uri = "https://en.wikipedia.org:443/wiki/Hypertext_Transfer_Protocol"

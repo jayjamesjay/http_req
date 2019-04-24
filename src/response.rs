@@ -186,7 +186,7 @@ impl Headers {
     pub fn default_http(uri: &Uri) -> Headers {
         let mut headers = Headers::with_capacity(4);
 
-        headers.insert("Host", &uri.host_header().unwrap_or(String::new()));
+        headers.insert("Host", &uri.host_header().unwrap_or_default());
         headers.insert("Referer", uri);
 
         headers
@@ -576,7 +576,10 @@ mod tests {
             Ascii::new("Date".to_string()),
             "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
         );
-        headers_expect.insert(Ascii::new("Content-Type".to_string()), "text/html".to_string());
+        headers_expect.insert(
+            Ascii::new("Content-Type".to_string()),
+            "text/html".to_string(),
+        );
         headers_expect.insert(Ascii::new("Content-Length".to_string()), "100".to_string());
 
         let headers = HEADERS.parse::<Headers>().unwrap();
@@ -590,7 +593,10 @@ mod tests {
             Ascii::new("Date".to_string()),
             "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
         );
-        headers_expect.insert(Ascii::new("Content-Type".to_string()), "text/html".to_string());
+        headers_expect.insert(
+            Ascii::new("Content-Type".to_string()),
+            "text/html".to_string(),
+        );
         headers_expect.insert(Ascii::new("Content-Length".to_string()), "100".to_string());
 
         assert_eq!(
@@ -601,12 +607,7 @@ mod tests {
 
     #[test]
     fn headers_case_insensitive() {
-        let header_names = [
-            "Host",
-            "host",
-            "HOST",
-            "HoSt",
-        ];
+        let header_names = ["Host", "host", "HOST", "HoSt"];
         let mut headers = Headers::with_capacity(1);
         headers.insert("Host", "doc.rust-lang.org");
 
@@ -627,7 +628,10 @@ mod tests {
             Ascii::new("Date".to_string()),
             "Sat, 11 Jan 2003 02:44:04 GMT".to_string(),
         );
-        headers_expect.insert(Ascii::new("Content-Type".to_string()), "text/html".to_string());
+        headers_expect.insert(
+            Ascii::new("Content-Type".to_string()),
+            "text/html".to_string(),
+        );
         headers_expect.insert(Ascii::new("Content-Length".to_string()), "100".to_string());
 
         assert_eq!(HashMap::from(headers), headers_expect);
