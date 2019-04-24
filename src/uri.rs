@@ -71,16 +71,12 @@ impl Uri {
 
     ///Returns host of this `Uri` to use in a header.
     pub fn host_header(&self) -> Option<String> {
-        match self.authority {
-            Some(ref a) => match (a.host(), a.port()) {
-                (Some(h), Some(p)) => Some(match *p {
-                    HTTP_PORT | HTTPS_PORT => h.to_string(),
-                    _ => format!("{}:{}", h, p),
-                }),
-                (Some(h), None) => Some(h.to_string()),
-                _ => None,
+        match self.host() {
+            Some(h) => match self.corr_port() {
+                HTTP_PORT | HTTPS_PORT => Some(h.to_string()),
+                p @ _ => Some(format!("{}:{}", h, p)),
             },
-            None => None,
+            _ => None,
         }
     }
 
@@ -444,6 +440,21 @@ mod tests {
         assert_eq!(uris[1].host(), None);
         assert_eq!(uris[2].host(), Some("en.wikipedia.org"));
         assert_eq!(uris[3].host(), None);
+    }
+    
+    #[test]
+    fn uri_host_header() {
+        let uri_def: Uri = "https://en.wikipedia.org:443/wiki/Hypertext_Transfer_Protocol"
+            .parse()
+            .unwrap();
+        let uris: Vec<_> = TEST_URIS
+            .iter()
+            .map(|uri| uri.parse::<Uri>().unwrap())
+            .collect();
+
+        assert_eq!(uris[0].host_header(), Some("foo.com:12".to_string()));
+        assert_eq!(uris[2].host_header(), Some("en.wikipedia.org".to_string()));
+        assert_eq!(uri_def.host_header(), Some("en.wikipedia.org".to_string()));
     }
 
     #[test]
