@@ -186,7 +186,7 @@ impl Headers {
     pub fn default_http(uri: &Uri) -> Headers {
         let mut headers = Headers::with_capacity(4);
 
-        headers.insert("Host", uri.host().unwrap_or(""));
+        headers.insert("Host", &uri.host_header().unwrap_or(String::new()));
         headers.insert("Referer", uri);
 
         headers
