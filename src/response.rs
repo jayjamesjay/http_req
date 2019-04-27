@@ -203,9 +203,9 @@ impl str::FromStr for Headers {
             let headers = headers
                 .lines()
                 .map(|elem| {
-                    let idx = elem.find(": ").unwrap();
+                    let idx = elem.find(":").unwrap();
                     let (key, value) = elem.split_at(idx);
-                    (Ascii::new(key.to_string()), value[2..].to_string())
+                    (Ascii::new(key.to_string()), value[1..].trim().to_string())
                 })
                 .collect();
 
