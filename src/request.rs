@@ -295,14 +295,6 @@ impl<'a> Request<'a> {
         self
     }
 
-    #[deprecated(note = "Please use method instead")]
-    pub fn set_method<T>(&mut self, method: T)
-    where
-        Method: From<T>,
-    {
-        self.inner.method(method);
-    }
-
     ///Sets body for request
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
         self.inner.body(body);
@@ -327,11 +319,6 @@ impl<'a> Request<'a> {
         self
     }
 
-    #[deprecated(note = "Please use the read_timeout instead")]
-    pub fn set_connect_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.connect_timeout(timeout)
-    }
-
     ///Sets read timeout on internal `TcpStream` instance
     ///
     ///`timeout` will be passed to
@@ -346,11 +333,6 @@ impl<'a> Request<'a> {
         self
     }
 
-    #[deprecated(note = "Please use the read_timeout instead")]
-    pub fn set_read_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.read_timeout(timeout)
-    }
-
     ///Sets write timeout on internal `TcpStream` instance
     ///
     ///`timeout` will be passed to
@@ -363,11 +345,6 @@ impl<'a> Request<'a> {
     {
         self.write_timeout = timeout.map(Duration::from);
         self
-    }
-
-    #[deprecated(note = "Please use the write_timeout instead")]
-    pub fn set_write_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.write_timeout(timeout)
     }
 
     ///Sends HTTP request.

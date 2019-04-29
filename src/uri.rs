@@ -1,31 +1,43 @@
 //! uri operations
 use crate::error::{Error, ParseErr};
-use std::{convert::AsRef, fmt, str, string::ToString};
+use std::{
+    fmt,
+    ops::{Index, Range},
+    str,
+    string::ToString,
+};
 
 const HTTP_PORT: u16 = 80;
 const HTTPS_PORT: u16 = 443;
 
-pub trait RefInner<'a, T, U: ?Sized> {
-    fn ref_in(&'a self) -> Option<&'a U>;
-    fn ref_or_default(&'a self, def: &'a U) -> &'a U;
+///A (half-open) range bounded inclusively below and exclusively above (start..end) with `Copy`.
+#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
+pub struct RangeC {
+    pub start: usize,
+    pub end: usize,
 }
 
-impl<'a, U: ?Sized, T: AsRef<U>> RefInner<'a, T, U> for Option<T> {
-    ///Returns None if the option is None, otherwise
-    ///transforms `Option<T>` to `Option<&U>` by calling `as_ref` on contained value
-    fn ref_in(&'a self) -> Option<&'a U> {
-        match self {
-            Some(ref v) => Some(v.as_ref()),
-            None => None,
+impl RangeC {
+    pub fn new(start: usize, end: usize) -> RangeC {
+        RangeC { start, end }
+    }
+}
+
+impl From<&RangeC> for Range<usize> {
+    fn from(range: &RangeC) -> Range<usize> {
+        Range {
+            start: range.start,
+            end: range.end,
         }
     }
+}
 
-    ///Returns reference to contained value or a default.
-    fn ref_or_default(&'a self, def: &'a U) -> &'a U {
-        match self {
-            Some(ref s) => s.as_ref(),
-            None => def,
-        }
+impl Index<RangeC> for String {
+    type Output = str;
+
+    #[inline]
+    fn index(&self, index: RangeC) -> &str {
+        &self[..][Range::from(&index)]
     }
 }
 
@@ -40,21 +52,22 @@ impl<'a, U: ?Sized, T: AsRef<U>> RefInner<'a, T, U> for Option<T> {
 ///```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Uri {
-    scheme: String,
+    inner: String,
+    scheme: RangeC,
     authority: Option<Authority>,
-    path: Option<String>,
-    query: Option<String>,
-    fragment: Option<String>,
+    path: Option<RangeC>,
+    query: Option<RangeC>,
+    fragment: Option<RangeC>,
 }
 
 impl Uri {
     ///Returns scheme of this `Uri`.
     pub fn scheme(&self) -> &str {
-        &self.scheme
+        &self.inner[self.scheme]
     }
 
     ///Returns information about the user included in this `Uri`.
-    pub fn user_info(&self) -> Option<String> {
+    pub fn user_info(&self) -> Option<&str> {
         match self.authority {
             Some(ref a) => a.user_info(),
             None => None,
@@ -64,7 +77,7 @@ impl Uri {
     ///Returns host of this `Uri`.
     pub fn host(&self) -> Option<&str> {
         match self.authority {
-            Some(ref a) => a.host(),
+            Some(ref a) => Some(a.host()),
             None => None,
         }
     }
@@ -81,10 +94,10 @@ impl Uri {
     }
 
     ///Returns port of this `Uri`
-    pub fn port(&self) -> &Option<u16> {
+    pub fn port(&self) -> Option<u16> {
         match &self.authority {
             Some(a) => a.port(),
-            None => &None,
+            None => None,
         }
     }
 
@@ -104,45 +117,48 @@ impl Uri {
 
     ///Returns path of this `Uri`.
     pub fn path(&self) -> Option<&str> {
-        self.path.ref_in()
+        self.path.map(|r| &self.inner[r])
     }
 
     ///Returns query of this `Uri`.
     pub fn query(&self) -> Option<&str> {
-        self.query.ref_in()
+        self.query.map(|r| &self.inner[r])
     }
 
     ///Returns fragment of this `Uri`.
     pub fn fragment(&self) -> Option<&str> {
-        self.fragment.ref_in()
+        self.fragment.map(|r| &self.inner[r])
     }
 
     ///Returns resource `Uri` points to.
-    pub fn resource(&self) -> String {
-        let mut resource = (&self.path().unwrap_or("/")).to_string();
-        let query = self.query();
-        let fragment = self.fragment();
+    pub fn resource(&self) -> &str {
+        let mut result = "/";
 
-        if query.is_some() {
-            resource = resource + "?" + query.unwrap_or("");
+        for v in &[self.path, self.query, self.fragment] {
+            if let Some(r) = v {
+                result = &self.inner[r.start..];
+                break;
+            }
         }
 
-        if fragment.is_some() {
-            resource + "#" + fragment.unwrap_or("")
-        } else {
-            resource
-        }
+        result
     }
 }
 
 impl fmt::Display for Uri {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let authority = match self.authority {
-            Some(ref a) => format!("//{}", a),
-            None => "".to_string(),
+        let uri = if let Some(auth) = &self.authority {
+            let mut uri = self.inner.to_string();
+            let auth = auth.to_string();
+            let start = self.scheme.end + 3;
+
+            uri.replace_range(start..(start + auth.len()), &auth);
+            uri
+        } else {
+            self.inner.to_string()
         };
 
-        write!(f, "{}:{}{}", self.scheme(), authority, self.resource())
+        write!(f, "{}", uri)
     }
 }
 
@@ -153,45 +169,41 @@ impl str::FromStr for Uri {
         let mut s = s.to_string();
         remove_spaces(&mut s);
 
-        let (scheme, mut uri_part) = get_chunks(&s, ":");
+        let (scheme, mut uri_part) = get_chunks(&s, Some(RangeC::new(0, s.len())), ":");
 
-        let scheme = match scheme {
-            Some(s) => s.to_string(),
-            None => return Err(Error::Parse(ParseErr::Empty)),
+        let scheme = if let Some(scheme) = scheme {
+            scheme
+        } else {
+            return Err(Error::Parse(ParseErr::UriErr));
         };
 
         let mut authority = None;
 
         if let Some(u) = &uri_part {
-            if u.contains("//") {
-                let (auth, part) = get_chunks(&u[2..], "/");
+            if s[*u].contains("//") {
+                let (auth, part) = get_chunks(&s, Some(RangeC::new(u.start + 2, u.end)), "/");
 
-                authority = match auth {
-                    Some(a) => match a.parse() {
-                        Ok(i) => Some(i),
-                        Err(e) => return Err(Error::Parse(e)),
-                    },
-                    None => None,
+                authority = if let Some(a) = auth {
+                    println!("{:?}", &s[a]);
+                    Some(s[a].parse()?)
+                } else {
+                    None
                 };
 
                 uri_part = part;
             }
         }
 
-        let (path, uri_part) = chunk(&uri_part, "?");
+        let (mut path, uri_part) = get_chunks(&s, uri_part, "?");
 
-        let path = if authority.is_some() {
-            path.and_then(|v| Some(format!("/{}", v)))
-        } else {
-            path.map(ToString::to_string)
-        };
+        if authority.is_some() {
+            path = path.and_then(|p| Some(RangeC::new(p.start - 1, p.end)));
+        }
 
-        let (query, fragment) = chunk(&uri_part, "#");
-
-        let query = query.map(ToString::to_string);
-        let fragment = fragment.map(ToString::to_string);
+        let (query, fragment) = get_chunks(&s, uri_part, "#");
 
         Ok(Uri {
+            inner: s,
             scheme,
             authority,
             path,
@@ -208,58 +220,48 @@ impl str::FromStr for Uri {
 ///use http_req::uri::Authority;
 ///
 ///let auth: Authority = "user:info@foo.com:443".parse().unwrap();
-///assert_eq!(auth.host(), Some("foo.com"));
+///assert_eq!(auth.host(), "foo.com");
 ///```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Authority {
-    username: Option<String>,
-    password: Option<String>,
-    host: Option<String>,
-    port: Option<u16>,
+    inner: String,
+    username: Option<RangeC>,
+    password: Option<RangeC>,
+    host: RangeC,
+    port: Option<RangeC>,
 }
 
 impl Authority {
     ///Returns username of this `Authority`
     pub fn username(&self) -> Option<&str> {
-        self.username.ref_in()
+        self.username.map(|r| &self.inner[r])
     }
 
     ///Returns password of this `Authority`
     pub fn password(&self) -> Option<&str> {
-        self.password.ref_in()
+        self.password.map(|r| &self.inner[r])
     }
 
     ///Returns information about the user
-    pub fn user_info(&self) -> Option<String> {
-        let mut user_info = String::new();
-
-        if let Some(name) = &self.username {
-            user_info.push_str(&name);
-
-            if self.password.is_some() {
-                user_info.push(':');
-            }
-        }
-
-        if let Some(pass) = &self.password {
-            user_info.push_str(&pass);
-        }
-
-        if user_info.is_empty() {
-            None
-        } else {
-            Some(user_info)
+    pub fn user_info(&self) -> Option<&str> {
+        match (&self.username, &self.password) {
+            (Some(u), Some(p)) => Some(&self.inner[u.start..p.end]),
+            (Some(u), None) => Some(&self.inner[*u]),
+            _ => None,
         }
     }
 
     ///Returns host of this `Authority`
-    pub fn host(&self) -> Option<&str> {
-        self.host.ref_in()
+    pub fn host(&self) -> &str {
+        &self.inner[self.host]
     }
 
     ///Returns port of this `Authority`
-    pub fn port(&self) -> &Option<u16> {
-        &self.port
+    pub fn port(&self) -> Option<u16> {
+        match &self.port {
+            Some(p) => Some(self.inner[*p].parse().unwrap()),
+            None => None,
+        }
     }
 }
 
@@ -267,33 +269,31 @@ impl str::FromStr for Authority {
     type Err = ParseErr;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut s = s.to_string();
-        remove_spaces(&mut s);
-
         let mut username = None;
         let mut password = None;
 
         let uri_part = if s.contains('@') {
-            let (info, part) = get_chunks(&s, "@");
+            let (info, part) = get_chunks(&s, Some(RangeC::new(0, s.len())), "@");
+            let (name, pass) = get_chunks(&s, info, ":");
 
-            let (name, pass) = chunk(&info, ":");
-            username = name.map(ToString::to_string);
-            password = pass.map(ToString::to_string);
+            username = name;
+            password = pass;
 
             part
         } else {
-            Some(&s[..])
+            Some(RangeC::new(0, s.len()))
         };
 
-        let (host, uri_part) = chunk(&uri_part, ":");
+        let (host, port) = get_chunks(&s, uri_part, ":");
 
-        let host = host.map(ToString::to_string);
-        let port = match uri_part {
-            Some(p) => Some(p.parse()?),
-            None => None,
+        let host = if let Some(host) = host {
+            host
+        } else {
+            return Err(ParseErr::UriErr);
         };
 
         Ok(Authority {
+            inner: s.to_string(),
             username,
             password,
             host,
@@ -304,17 +304,19 @@ impl str::FromStr for Authority {
 
 impl fmt::Display for Authority {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let user_info = match self.user_info() {
-            Some(ref u) => format!("{}@", u),
-            None => "".to_string(),
+        let auth = if let Some(pass) = self.password {
+            let range = Range::from(&pass);
+
+            let pass_hidden = "*".repeat(range.len());
+            let mut auth = self.inner.to_string();
+            auth.replace_range(range, &pass_hidden);
+
+            auth
+        } else {
+            self.inner.to_string()
         };
 
-        let port = match self.port {
-            Some(ref p) => format!(":{}", p),
-            None => "".to_string(),
-        };
-
-        write!(f, "{}{}{}", user_info, self.host().unwrap_or(""), port)
+        write!(f, "{}", auth)
     }
 }
 
@@ -323,34 +325,43 @@ fn remove_spaces(text: &mut String) {
     text.retain(|c| !c.is_whitespace());
 }
 
-//Splits `String` from `base` by `separator`. If `base` is `None`, it will return
-//tuple consisting two `None` values.
-fn chunk<'a>(base: &'a Option<&'a str>, separator: &'a str) -> (Option<&'a str>, Option<&'a str>) {
-    match base {
-        Some(ref u) => get_chunks(u, separator),
-        None => (None, None),
-    }
-}
-
 //Splits `s` by `separator`. If `separator` is found inside `s`, it will return two `Some` values
-//consisting parts of splitted `&str`. If `separator` is at the end of `s` or it's not found,
-//it will return tuple consisting `Some` with `s` inside and None.
-fn get_chunks<'a>(s: &'a str, separator: &'a str) -> (Option<&'a str>, Option<&'a str>) {
-    match s.find(separator) {
-        Some(i) => {
-            let (chunk, rest) = s.split_at(i);
-            let rest = &rest[separator.len()..];
-            let rest = if rest.is_empty() { None } else { Some(rest) };
+//consisting `RangeC` of each `&str`. If `separator` is at the end of `s` or it's not found,
+//it will return tuple consisting `Some` with `RangeC` of entire `s` inside and None.
+fn get_chunks<'a>(
+    s: &'a str,
+    range: Option<RangeC>,
+    separator: &'a str,
+) -> (Option<RangeC>, Option<RangeC>) {
+    if let Some(r) = range {
+        let range = Range::from(&r);
 
-            (Some(chunk), rest)
-        }
-        None => {
-            if !s.is_empty() {
-                (Some(s), None)
-            } else {
-                (None, None)
+        match s[range.clone()].find(separator) {
+            Some(i) => {
+                let range_1 = if !s[r.start..r.start + i].is_empty() {
+                    Some(RangeC::new(r.start, r.start + i))
+                } else {
+                    None
+                };
+
+                let range_2 = if !s[r.start + i + 1..r.end].is_empty() {
+                    Some(RangeC::new(r.start + i + 1, r.end))
+                } else {
+                    None
+                };
+
+                (range_1, range_2)
+            }
+            None => {
+                if !s[range].is_empty() {
+                    (Some(r), None)
+                } else {
+                    (None, None)
+                }
             }
         }
+    } else {
+        (None, None)
     }
 }
 
@@ -387,9 +398,9 @@ mod tests {
             .unwrap();
         assert_eq!(uri.scheme(), "abc");
 
-        assert_eq!(uri.user_info(), Some("username:password".to_string()));
+        assert_eq!(uri.user_info(), Some("username:password"));
         assert_eq!(uri.host(), Some("example.com"));
-        assert_eq!(uri.port(), &Some(123));
+        assert_eq!(uri.port(), Some(123));
 
         assert_eq!(uri.path(), Some("/path/data"));
         assert_eq!(uri.query(), Some("key=value&key2=value2"));
@@ -423,7 +434,7 @@ mod tests {
             .map(|uri| uri.parse::<Uri>().unwrap())
             .collect();
 
-        assert_eq!(uris[0].user_info(), Some("user:info".to_string()));
+        assert_eq!(uris[0].user_info(), Some("user:info"));
         assert_eq!(uris[1].user_info(), None);
         assert_eq!(uris[2].user_info(), None);
         assert_eq!(uris[3].user_info(), None);
@@ -464,10 +475,10 @@ mod tests {
             .map(|uri| uri.parse::<Uri>().unwrap())
             .collect();
 
-        assert_eq!(uris[0].port(), &Some(12));
+        assert_eq!(uris[0].port(), Some(12));
 
         for uri in uris.iter().skip(1) {
-            assert_eq!(uri.port(), &None);
+            assert_eq!(uri.port(), None);
         }
     }
 
@@ -494,7 +505,7 @@ mod tests {
         assert_eq!(uris[0].path(), Some("/bar/baz"));
         assert_eq!(
             uris[1].path(),
-            Some("/C:/Users/User/Pictures/screenshot.png")
+            Some("C:/Users/User/Pictures/screenshot.png")
         );
         assert_eq!(uris[2].path(), Some("/wiki/Hypertext_Transfer_Protocol"));
         assert_eq!(uris[3].path(), Some("John.Doe@example.com"));
@@ -536,7 +547,7 @@ mod tests {
             .collect();
 
         assert_eq!(uris[0].resource(), "/bar/baz?query#fragment");
-        assert_eq!(uris[1].resource(), "/C:/Users/User/Pictures/screenshot.png");
+        assert_eq!(uris[1].resource(), "C:/Users/User/Pictures/screenshot.png");
         assert_eq!(uris[2].resource(), "/wiki/Hypertext_Transfer_Protocol");
         assert_eq!(uris[3].resource(), "John.Doe@example.com");
     }
@@ -548,58 +559,15 @@ mod tests {
             .map(|uri| uri.parse::<Uri>().unwrap())
             .collect();
 
-        for i in 0..uris.len() {
+        assert_eq!(
+            uris[0].to_string(),
+            "https://user:****@foo.com:12/bar/baz?query#fragment"
+        );
+
+        for i in 1..uris.len() {
             let s = uris[i].to_string();
             assert_eq!(s, TEST_URIS[i]);
         }
-    }
-
-    #[test]
-    fn authority_username() {
-        let auths: Vec<_> = TEST_AUTH
-            .iter()
-            .map(|auth| auth.parse::<Authority>().unwrap())
-            .collect();
-
-        assert_eq!(auths[0].username(), Some("user"));
-        assert_eq!(auths[1].username(), None);
-        assert_eq!(auths[2].username(), Some("John.Doe"));
-    }
-
-    #[test]
-    fn authority_password() {
-        let auths: Vec<_> = TEST_AUTH
-            .iter()
-            .map(|auth| auth.parse::<Authority>().unwrap())
-            .collect();
-
-        assert_eq!(auths[0].password(), Some("info"));
-        assert_eq!(auths[1].password(), None);
-        assert_eq!(auths[2].password(), None);
-    }
-
-    #[test]
-    fn authority_host() {
-        let auths: Vec<_> = TEST_AUTH
-            .iter()
-            .map(|auth| auth.parse::<Authority>().unwrap())
-            .collect();
-
-        assert_eq!(auths[0].host(), Some("foo.com"));
-        assert_eq!(auths[1].host(), Some("en.wikipedia.org"));
-        assert_eq!(auths[2].host(), Some("example.com"));
-    }
-
-    #[test]
-    fn authority_port() {
-        let auths: Vec<_> = TEST_AUTH
-            .iter()
-            .map(|auth| auth.parse::<Authority>().unwrap())
-            .collect();
-
-        assert_eq!(auths[0].port(), &Some(12));
-        assert_eq!(auths[1].port(), &None);
-        assert_eq!(auths[2].port(), &None);
     }
 
     #[test]
@@ -616,7 +584,9 @@ mod tests {
             .map(|auth| auth.parse::<Authority>().unwrap())
             .collect();
 
-        for i in 0..auths.len() {
+        assert_eq!("user:****@foo.com:12", auths[0].to_string());
+
+        for i in 1..auths.len() {
             let s = auths[i].to_string();
             assert_eq!(s, TEST_AUTH[i]);
         }
