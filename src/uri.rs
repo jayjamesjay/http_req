@@ -184,7 +184,6 @@ impl str::FromStr for Uri {
                 let (auth, part) = get_chunks(&s, Some(RangeC::new(u.start + 2, u.end)), "/");
 
                 authority = if let Some(a) = auth {
-                    println!("{:?}", &s[a]);
                     Some(s[a].parse()?)
                 } else {
                     None
@@ -196,7 +195,7 @@ impl str::FromStr for Uri {
 
         let (mut path, uri_part) = get_chunks(&s, uri_part, "?");
 
-        if authority.is_some() {
+        if authority.is_some() || &s[scheme] == "file" {
             path = path.and_then(|p| Some(RangeC::new(p.start - 1, p.end)));
         }
 
@@ -338,17 +337,9 @@ fn get_chunks<'a>(
 
         match s[range.clone()].find(separator) {
             Some(i) => {
-                let range_1 = if !s[r.start..r.start + i].is_empty() {
-                    Some(RangeC::new(r.start, r.start + i))
-                } else {
-                    None
-                };
-
-                let range_2 = if !s[r.start + i + 1..r.end].is_empty() {
-                    Some(RangeC::new(r.start + i + 1, r.end))
-                } else {
-                    None
-                };
+                let range_1 = Some(RangeC::new(r.start, r.start + i)).filter(|r| r.start != r.end);
+                let range_2 =
+                    Some(RangeC::new(r.start + i + 1, r.end)).filter(|r| r.start != r.end);
 
                 (range_1, range_2)
             }
@@ -505,7 +496,7 @@ mod tests {
         assert_eq!(uris[0].path(), Some("/bar/baz"));
         assert_eq!(
             uris[1].path(),
-            Some("C:/Users/User/Pictures/screenshot.png")
+            Some("/C:/Users/User/Pictures/screenshot.png")
         );
         assert_eq!(uris[2].path(), Some("/wiki/Hypertext_Transfer_Protocol"));
         assert_eq!(uris[3].path(), Some("John.Doe@example.com"));
@@ -547,7 +538,7 @@ mod tests {
             .collect();
 
         assert_eq!(uris[0].resource(), "/bar/baz?query#fragment");
-        assert_eq!(uris[1].resource(), "C:/Users/User/Pictures/screenshot.png");
+        assert_eq!(uris[1].resource(), "/C:/Users/User/Pictures/screenshot.png");
         assert_eq!(uris[2].resource(), "/wiki/Hypertext_Transfer_Protocol");
         assert_eq!(uris[3].resource(), "John.Doe@example.com");
     }
@@ -568,6 +559,54 @@ mod tests {
             let s = uris[i].to_string();
             assert_eq!(s, TEST_URIS[i]);
         }
+    }
+
+    #[test]
+    fn authority_username() {
+        let auths: Vec<_> = TEST_AUTH
+            .iter()
+            .map(|auth| auth.parse::<Authority>().unwrap())
+            .collect();
+
+        assert_eq!(auths[0].username(), Some("user"));
+        assert_eq!(auths[1].username(), None);
+        assert_eq!(auths[2].username(), Some("John.Doe"));
+    }
+
+    #[test]
+    fn authority_password() {
+        let auths: Vec<_> = TEST_AUTH
+            .iter()
+            .map(|auth| auth.parse::<Authority>().unwrap())
+            .collect();
+
+        assert_eq!(auths[0].password(), Some("info"));
+        assert_eq!(auths[1].password(), None);
+        assert_eq!(auths[2].password(), None);
+    }
+
+    #[test]
+    fn authority_host() {
+        let auths: Vec<_> = TEST_AUTH
+            .iter()
+            .map(|auth| auth.parse::<Authority>().unwrap())
+            .collect();
+
+        assert_eq!(auths[0].host(), "foo.com");
+        assert_eq!(auths[1].host(), "en.wikipedia.org");
+        assert_eq!(auths[2].host(), "example.com");
+    }
+
+    #[test]
+    fn authority_port() {
+        let auths: Vec<_> = TEST_AUTH
+            .iter()
+            .map(|auth| auth.parse::<Authority>().unwrap())
+            .collect();
+
+        assert_eq!(auths[0].port(), Some(12));
+        assert_eq!(auths[1].port(), None);
+        assert_eq!(auths[2].port(), None);
     }
 
     #[test]
