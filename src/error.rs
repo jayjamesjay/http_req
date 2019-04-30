@@ -8,6 +8,7 @@ pub enum ParseErr {
     StatusErr,
     HeadersErr,
     UriErr,
+    Invalid,
     Empty
 }
 
@@ -24,10 +25,11 @@ impl StdErr for ParseErr {
         match self {
             Utf8(_) => "invalid character",
             Int(_) => "cannot parse number",
+            Invalid => "invalid value",
             Empty => "nothing to parse",
             StatusErr => "status line contains invalid values",
             HeadersErr => "headers contain invalid values",
-            UriErr => "uri contains invalid characters"
+            UriErr => "uri contains invalid characters",
         }
     }
 }
