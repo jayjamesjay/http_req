@@ -9,7 +9,7 @@ pub enum ParseErr {
     HeadersErr,
     UriErr,
     Invalid,
-    Empty
+    Empty,
 }
 
 impl fmt::Display for ParseErr {

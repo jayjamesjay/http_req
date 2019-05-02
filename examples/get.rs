@@ -5,6 +5,6 @@ fn main() {
     let res = request::get("https://doc.rust-lang.org/", &mut writer).unwrap();
 
     println!("Status: {} {}", res.status_code(), res.reason());
-    println!("{:?}", res.headers());
+    println!("Headers {}", res.headers());
     //println!("{}", String::from_utf8_lossy(&writer));
 }

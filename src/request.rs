@@ -44,7 +44,7 @@ where
 }
 
 ///HTTP request methods
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Method {
     GET,
     HEAD,
@@ -111,7 +111,7 @@ impl<'a> RequestBuilder<'a> {
     ///Creates new `RequestBuilder` with default parameters
     pub fn new(uri: &'a Uri) -> RequestBuilder<'a> {
         RequestBuilder {
-            headers: Headers::default_http(&uri),
+            headers: Headers::default_http(uri),
             uri,
             method: Method::GET,
             version: HTTP_V,
@@ -281,7 +281,6 @@ impl<'a> Request<'a> {
         U: ToString + ?Sized,
     {
         self.inner.header(key, val);
-
         self
     }
 
@@ -291,7 +290,6 @@ impl<'a> Request<'a> {
         Method: From<T>,
     {
         self.inner.method(method);
-
         self
     }
 

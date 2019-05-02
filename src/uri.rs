@@ -18,13 +18,13 @@ pub struct RangeC {
 }
 
 impl RangeC {
-    pub fn new(start: usize, end: usize) -> RangeC {
+    pub const fn new(start: usize, end: usize) -> RangeC {
         RangeC { start, end }
     }
 }
 
-impl From<&RangeC> for Range<usize> {
-    fn from(range: &RangeC) -> Range<usize> {
+impl From<RangeC> for Range<usize> {
+    fn from(range: RangeC) -> Range<usize> {
         Range {
             start: range.start,
             end: range.end,
@@ -37,7 +37,7 @@ impl Index<RangeC> for String {
 
     #[inline]
     fn index(&self, index: RangeC) -> &str {
-        &self[..][Range::from(&index)]
+        &self[..][Range::from(index)]
     }
 }
 
@@ -268,6 +268,8 @@ impl str::FromStr for Authority {
     type Err = ParseErr;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let inner = s.to_string();
+
         let mut username = None;
         let mut password = None;
 
@@ -284,15 +286,20 @@ impl str::FromStr for Authority {
         };
 
         let (host, port) = get_chunks(&s, uri_part, ":");
-
         let host = if let Some(host) = host {
             host
         } else {
             return Err(ParseErr::UriErr);
         };
 
+        if let Some(p) = port {
+            if inner[p].parse::<u16>().is_err() {
+                return Err(ParseErr::UriErr);
+            }
+        }
+
         Ok(Authority {
-            inner: s.to_string(),
+            inner,
             username,
             password,
             host,
@@ -304,11 +311,11 @@ impl str::FromStr for Authority {
 impl fmt::Display for Authority {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let auth = if let Some(pass) = self.password {
-            let range = Range::from(&pass);
+            let range = Range::from(pass);
 
-            let pass_hidden = "*".repeat(range.len());
+            let hidden_pass = "*".repeat(range.len());
             let mut auth = self.inner.to_string();
-            auth.replace_range(range, &pass_hidden);
+            auth.replace_range(range, &hidden_pass);
 
             auth
         } else {
@@ -333,15 +340,14 @@ fn get_chunks<'a>(
     separator: &'a str,
 ) -> (Option<RangeC>, Option<RangeC>) {
     if let Some(r) = range {
-        let range = Range::from(&r);
+        let range = Range::from(r);
 
         match s[range.clone()].find(separator) {
             Some(i) => {
-                let range_1 = Some(RangeC::new(r.start, r.start + i)).filter(|r| r.start != r.end);
-                let range_2 =
-                    Some(RangeC::new(r.start + i + 1, r.end)).filter(|r| r.start != r.end);
+                let before = Some(RangeC::new(r.start, r.start + i)).filter(|r| r.start != r.end);
+                let after = Some(RangeC::new(r.start + i + 1, r.end)).filter(|r| r.start != r.end);
 
-                (range_1, range_2)
+                (before, after)
             }
             None => {
                 if !s[range].is_empty() {
@@ -629,5 +635,35 @@ mod tests {
             let s = auths[i].to_string();
             assert_eq!(s, TEST_AUTH[i]);
         }
+    }
+
+    #[test]
+    fn range_c_new() {
+        assert_eq!(
+            RangeC::new(22, 343),
+            RangeC {
+                start: 22,
+                end: 343,
+            }
+        )
+    }
+
+    #[test]
+    fn range_from_range_c() {
+        assert_eq!(
+            Range::from(RangeC::new(222, 43)),
+            Range {
+                start: 222,
+                end: 43,
+            }
+        )
+    }
+
+    #[test]
+    fn range_c_index() {
+        const RANGE: RangeC = RangeC::new(0, 4);
+        let text = TEST_AUTH[0].to_string();
+
+        assert_eq!(text[..4], text[RANGE])
     }
 }

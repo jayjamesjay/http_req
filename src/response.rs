@@ -119,7 +119,7 @@ impl str::FromStr for Status {
     }
 }
 
-///Wrapper around HashMap<String, String> with additional functionality for parsing HTTP headers
+///Wrapper around HashMap<Ascii<String>, String> with additional functionality for parsing HTTP headers
 ///
 ///# Example
 ///```
@@ -157,7 +157,7 @@ impl Headers {
     }
 
     ///Returns a reference to the value corresponding to the key.
-    pub fn get<T: ToString>(&self, k: T) -> Option<&std::string::String> {
+    pub fn get<T: ToString + ?Sized>(&self, k: &T) -> Option<&std::string::String> {
         self.0.get(&Ascii::new(k.to_string()))
     }
 
@@ -180,7 +180,7 @@ impl Headers {
         let mut headers = Headers::with_capacity(4);
 
         headers.insert("Host", &uri.host_header().unwrap_or_default());
-        headers.insert("Referer", uri);
+        headers.insert("Referer", &uri);
 
         headers
     }
@@ -218,6 +218,17 @@ impl From<HashMap<Ascii<String>, String>> for Headers {
 impl From<Headers> for HashMap<Ascii<String>, String> {
     fn from(map: Headers) -> HashMap<Ascii<String>, String> {
         map.0
+    }
+}
+
+impl fmt::Display for Headers {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let headers: String = self
+            .iter()
+            .map(|(key, val)| format!("  {}: {}\r\n", key, val))
+            .collect();
+
+        write!(f, "{{\r\n{}}}", headers)
     }
 }
 
