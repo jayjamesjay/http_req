@@ -28,7 +28,7 @@ fn main() {
 In order to use `http_req` with `rustls` in your project,  add following lines to `Cargo.toml`:
 ```toml
 [dependencies]
-http_req  = {version="^0.4", default-features = false, features = ["rust-tls"]}
+http_req  = {version="^0.5", default-features = false, features = ["rust-tls"]}
 ```
 
 ## License

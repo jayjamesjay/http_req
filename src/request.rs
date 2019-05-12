@@ -403,9 +403,8 @@ where
 ///Creates and sends GET request. Returns response for this request.
 pub fn get<T: AsRef<str>, U: Write>(uri: T, writer: &mut U) -> Result<Response, error::Error> {
     let uri = uri.as_ref().parse::<Uri>()?;
-    let request = Request::new(&uri);
 
-    request.send(writer)
+    Request::new(&uri).send(writer)
 }
 
 ///Creates and sends HEAD request. Returns response for this request.

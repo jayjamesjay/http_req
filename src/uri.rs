@@ -170,12 +170,7 @@ impl str::FromStr for Uri {
         remove_spaces(&mut s);
 
         let (scheme, mut uri_part) = get_chunks(&s, Some(RangeC::new(0, s.len())), ":");
-
-        let scheme = if let Some(scheme) = scheme {
-            scheme
-        } else {
-            return Err(Error::Parse(ParseErr::UriErr));
-        };
+        let scheme = scheme.ok_or(ParseErr::UriErr)?;
 
         let mut authority = None;
 
@@ -196,7 +191,7 @@ impl str::FromStr for Uri {
         let (mut path, uri_part) = get_chunks(&s, uri_part, "?");
 
         if authority.is_some() || &s[scheme] == "file" {
-            path = path.and_then(|p| Some(RangeC::new(p.start - 1, p.end)));
+            path = path.map(|p| RangeC::new(p.start - 1, p.end));
         }
 
         let (query, fragment) = get_chunks(&s, uri_part, "#");
@@ -286,11 +281,7 @@ impl str::FromStr for Authority {
         };
 
         let (host, port) = get_chunks(&s, uri_part, ":");
-        let host = if let Some(host) = host {
-            host
-        } else {
-            return Err(ParseErr::UriErr);
-        };
+        let host = host.ok_or(ParseErr::UriErr)?;
 
         if let Some(p) = port {
             if inner[p].parse::<u16>().is_err() {

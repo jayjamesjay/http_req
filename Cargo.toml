@@ -11,7 +11,7 @@ keywords = ["http", "client", "request"]
 edition = "2018"
 
 [dependencies]
-unicase = "^2.3"
+unicase = "^2.4"
 
 [features]
 default = ["native-tls"]
