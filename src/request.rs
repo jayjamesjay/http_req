@@ -9,6 +9,7 @@ use std::{
     fmt,
     io::{self, Read, Write},
     net::{TcpStream, ToSocketAddrs},
+    path::Path,
     time::Duration,
 };
 
@@ -248,6 +249,7 @@ pub struct Request<'a> {
     connect_timeout: Option<Duration>,
     read_timeout: Option<Duration>,
     write_timeout: Option<Duration>,
+    root_cert_file_pem: Option<&'a Path>,
 }
 
 impl<'a> Request<'a> {
@@ -261,6 +263,7 @@ impl<'a> Request<'a> {
             connect_timeout: Some(Duration::from_secs(60)),
             read_timeout: Some(Duration::from_secs(60)),
             write_timeout: Some(Duration::from_secs(60)),
+            root_cert_file_pem: None,
         }
     }
 
@@ -345,6 +348,12 @@ impl<'a> Request<'a> {
         self
     }
 
+    ///Add a file containing the PEM-encoded certificates that should be added in the trusted root store.
+    pub fn root_cert_file_pem(&mut self, file_path: &'a Path) -> &mut Self {
+        self.root_cert_file_pem = Some(file_path);
+        self
+    }
+
     ///Sends HTTP request.
     ///
     ///Creates `TcpStream` (and wraps it with `TlsStream` if needed). Writes request message
@@ -361,7 +370,12 @@ impl<'a> Request<'a> {
         stream.set_write_timeout(self.write_timeout)?;
 
         if self.inner.uri.scheme() == "https" {
-            let mut stream = tls::Config::default().connect(host, stream)?;
+            let mut cnf = tls::Config::default();
+            let cnf = match self.root_cert_file_pem {
+                Some(p) => cnf.add_root_cert_file_pem(p)?,
+                None => &mut cnf,
+            };
+            let mut stream = cnf.connect(host, stream)?;
             self.inner.send(&mut stream, writer)
         } else {
             self.inner.send(&mut stream, writer)

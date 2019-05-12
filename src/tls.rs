@@ -1,7 +1,15 @@
 //!secure connection over TLS
 
 use crate::error::Error as HttpError;
-use std::io;
+use std::fs::File;
+use std::io::{self, BufReader};
+use std::path::Path;
+
+#[cfg(feature = "native-tls")]
+use std::io::prelude::*;
+
+#[cfg(feature = "rust-tls")]
+use crate::error::ParseErr;
 
 #[cfg(not(any(feature = "native-tls", feature = "rust-tls")))]
 compile_error!("one of the `native-tls` or `rust-tls` features must be enabled");
@@ -50,6 +58,8 @@ impl<S: io::Read + io::Write> io::Write for Conn<S> {
 
 ///client configuration
 pub struct Config {
+    #[cfg(feature = "native-tls")]
+    extra_root_certs: Vec<native_tls::Certificate>,
     #[cfg(feature = "rust-tls")]
     client_config: std::sync::Arc<rustls::ClientConfig>,
 }
@@ -57,7 +67,9 @@ pub struct Config {
 impl Default for Config {
     #[cfg(feature = "native-tls")]
     fn default() -> Self {
-        Config {}
+        Config {
+            extra_root_certs: vec![],
+        }
     }
 
     #[cfg(feature = "rust-tls")]
@@ -75,15 +87,50 @@ impl Default for Config {
 
 impl Config {
     #[cfg(feature = "native-tls")]
+    pub fn add_root_cert_file_pem(&mut self, file_path: &Path) -> Result<&mut Self, HttpError> {
+        let f = File::open(file_path)?;
+        let f = BufReader::new(f);
+        let mut pem_crt = vec![];
+        for line in f.lines() {
+            let line = line?;
+            let is_end_cert = line.contains("-----END");
+            pem_crt.append(&mut line.into_bytes());
+            pem_crt.push(b'\n');
+            if is_end_cert {
+                let crt = native_tls::Certificate::from_pem(&pem_crt)?;
+                self.extra_root_certs.push(crt);
+                pem_crt.clear();
+            }
+        }
+        Ok(self)
+    }
+
+    #[cfg(feature = "native-tls")]
     pub fn connect<H, S>(&self, hostname: H, stream: S) -> Result<Conn<S>, HttpError>
     where
         H: AsRef<str>,
         S: io::Read + io::Write,
     {
-        let connector = native_tls::TlsConnector::new()?;
+        let mut connector_builder = native_tls::TlsConnector::builder();
+        for crt in self.extra_root_certs.iter() {
+            connector_builder.add_root_certificate((*crt).clone());
+        }
+        let connector = connector_builder.build()?;
         let stream = connector.connect(hostname.as_ref(), stream)?;
 
         Ok(Conn { stream })
+    }
+
+    #[cfg(feature = "rust-tls")]
+    pub fn add_root_cert_file_pem(&mut self, file_path: &Path) -> Result<&mut Self, HttpError> {
+        let f = File::open(file_path)?;
+        let mut f = BufReader::new(f);
+        let config = std::sync::Arc::make_mut(&mut self.client_config);
+        let _ = config
+            .root_store
+            .add_pem_file(&mut f)
+            .map_err(|_| HttpError::from(ParseErr::Invalid))?;
+        Ok(self)
     }
 
     #[cfg(feature = "rust-tls")]
