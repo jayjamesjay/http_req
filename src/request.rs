@@ -45,7 +45,7 @@ where
 }
 
 ///HTTP request methods
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Method {
     GET,
     HEAD,
@@ -112,7 +112,7 @@ impl<'a> RequestBuilder<'a> {
     ///Creates new `RequestBuilder` with default parameters
     pub fn new(uri: &'a Uri) -> RequestBuilder<'a> {
         RequestBuilder {
-            headers: Headers::default_http(&uri),
+            headers: Headers::default_http(uri),
             uri,
             method: Method::GET,
             version: HTTP_V,
@@ -284,7 +284,6 @@ impl<'a> Request<'a> {
         U: ToString + ?Sized,
     {
         self.inner.header(key, val);
-
         self
     }
 
@@ -294,16 +293,7 @@ impl<'a> Request<'a> {
         Method: From<T>,
     {
         self.inner.method(method);
-
         self
-    }
-
-    #[deprecated(note = "Please use method instead")]
-    pub fn set_method<T>(&mut self, method: T)
-    where
-        Method: From<T>,
-    {
-        self.inner.method(method);
     }
 
     ///Sets body for request
@@ -330,11 +320,6 @@ impl<'a> Request<'a> {
         self
     }
 
-    #[deprecated(note = "Please use the read_timeout instead")]
-    pub fn set_connect_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.connect_timeout(timeout)
-    }
-
     ///Sets read timeout on internal `TcpStream` instance
     ///
     ///`timeout` will be passed to
@@ -349,11 +334,6 @@ impl<'a> Request<'a> {
         self
     }
 
-    #[deprecated(note = "Please use the read_timeout instead")]
-    pub fn set_read_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.read_timeout(timeout)
-    }
-
     ///Sets write timeout on internal `TcpStream` instance
     ///
     ///`timeout` will be passed to
@@ -366,11 +346,6 @@ impl<'a> Request<'a> {
     {
         self.write_timeout = timeout.map(Duration::from);
         self
-    }
-
-    #[deprecated(note = "Please use the write_timeout instead")]
-    pub fn set_write_timeout(&mut self, timeout: Option<Duration>) -> &mut Self {
-        self.write_timeout(timeout)
     }
 
     ///Add a file containing the PEM-encoded certificates that should be added in the trusted root store.
@@ -442,9 +417,8 @@ where
 ///Creates and sends GET request. Returns response for this request.
 pub fn get<T: AsRef<str>, U: Write>(uri: T, writer: &mut U) -> Result<Response, error::Error> {
     let uri = uri.as_ref().parse::<Uri>()?;
-    let request = Request::new(&uri);
 
-    request.send(writer)
+    Request::new(&uri).send(writer)
 }
 
 ///Creates and sends HEAD request. Returns response for this request.

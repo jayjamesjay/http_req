@@ -5,8 +5,11 @@ use std::{error::Error as StdErr, fmt, io, num, str};
 pub enum ParseErr {
     Utf8(str::Utf8Error),
     Int(num::ParseIntError),
-    Empty,
+    StatusErr,
+    HeadersErr,
+    UriErr,
     Invalid,
+    Empty,
 }
 
 impl fmt::Display for ParseErr {
@@ -22,8 +25,11 @@ impl StdErr for ParseErr {
         match self {
             Utf8(_) => "invalid character",
             Int(_) => "cannot parse number",
-            Empty => "nothing to parse",
             Invalid => "invalid value",
+            Empty => "nothing to parse",
+            StatusErr => "status line contains invalid values",
+            HeadersErr => "headers contain invalid values",
+            UriErr => "uri contains invalid characters",
         }
     }
 }

@@ -27,17 +27,10 @@ impl Response {
     pub fn from_head(head: &[u8]) -> Result<Response, Error> {
         let mut head = str::from_utf8(head)?.splitn(2, '\n');
 
-        let status = head.next().ok_or(ParseErr::Invalid)?.parse()?;
-        let headers = head.next().ok_or(ParseErr::Invalid)?.parse()?;
+        let status = head.next().ok_or(ParseErr::StatusErr)?.parse()?;
+        let headers = head.next().ok_or(ParseErr::HeadersErr)?.parse()?;
 
         Ok(Response { status, headers })
-    }
-
-    #[deprecated(note = "Please use the from_head instead")]
-    pub fn parse_head(head: &[u8]) -> Result<(Status, Headers), ParseErr> {
-        let head = Self::from_head(head).map_err(|_| ParseErr::Invalid)?;
-
-        Ok((head.status, head.headers))
     }
 
     ///Parses `Response` from slice of bytes. Writes it's body to `writer`.
@@ -116,8 +109,8 @@ impl str::FromStr for Status {
     fn from_str(status_line: &str) -> Result<Status, Self::Err> {
         let mut status_line = status_line.trim().splitn(3, ' ');
 
-        let version = status_line.next().ok_or(ParseErr::Invalid)?;
-        let code: StatusCode = status_line.next().ok_or(ParseErr::Invalid)?.parse()?;
+        let version = status_line.next().ok_or(ParseErr::StatusErr)?;
+        let code: StatusCode = status_line.next().ok_or(ParseErr::StatusErr)?.parse()?;
         let reason = status_line
             .next()
             .unwrap_or_else(|| code.reason().unwrap_or("Unknown"));
@@ -126,7 +119,7 @@ impl str::FromStr for Status {
     }
 }
 
-///Wrapper around HashMap<String, String> with additional functionality for parsing HTTP headers
+///Wrapper around HashMap<Ascii<String>, String> with additional functionality for parsing HTTP headers
 ///
 ///# Example
 ///```
@@ -164,7 +157,7 @@ impl Headers {
     }
 
     ///Returns a reference to the value corresponding to the key.
-    pub fn get<T: ToString>(&self, k: T) -> Option<&std::string::String> {
+    pub fn get<T: ToString + ?Sized>(&self, k: &T) -> Option<&std::string::String> {
         self.0.get(&Ascii::new(k.to_string()))
     }
 
@@ -187,7 +180,7 @@ impl Headers {
         let mut headers = Headers::with_capacity(4);
 
         headers.insert("Host", &uri.host_header().unwrap_or_default());
-        headers.insert("Referer", uri);
+        headers.insert("Referer", &uri);
 
         headers
     }
@@ -203,7 +196,7 @@ impl str::FromStr for Headers {
             let headers = headers
                 .lines()
                 .map(|elem| {
-                    let idx = elem.find(":").unwrap();
+                    let idx = elem.find(':').unwrap();
                     let (key, value) = elem.split_at(idx);
                     (Ascii::new(key.to_string()), value[1..].trim().to_string())
                 })
@@ -211,7 +204,7 @@ impl str::FromStr for Headers {
 
             Ok(Headers(headers))
         } else {
-            Err(ParseErr::Invalid)
+            Err(ParseErr::HeadersErr)
         }
     }
 }
@@ -225,6 +218,17 @@ impl From<HashMap<Ascii<String>, String>> for Headers {
 impl From<Headers> for HashMap<Ascii<String>, String> {
     fn from(map: Headers) -> HashMap<Ascii<String>, String> {
         map.0
+    }
+}
+
+impl fmt::Display for Headers {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let headers: String = self
+            .iter()
+            .map(|(key, val)| format!("  {}: {}\r\n", key, val))
+            .collect();
+
+        write!(f, "{{\r\n{}}}", headers)
     }
 }
 
