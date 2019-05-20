@@ -84,7 +84,7 @@ impl fmt::Display for Method {
 ///use std::net::TcpStream;
 ///use http_req::{request::RequestBuilder, tls, uri::Uri, response::StatusCode};
 ///
-///let addr: Uri = "https://doc.rust-lang.org/".parse().unwrap();
+///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
 ///let mut writer = Vec::new();
 ///
 ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
@@ -236,7 +236,7 @@ impl<'a> RequestBuilder<'a> {
 ///use http_req::{request::Request, uri::Uri, response::StatusCode};
 ///
 ///let mut writer = Vec::new();
-///let uri: Uri = "https://doc.rust-lang.org/".parse().unwrap();
+///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
 ///
 ///let mut response = Request::new(&uri).send(&mut writer).unwrap();;
 ///

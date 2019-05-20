@@ -1,7 +1,7 @@
 use http_req::request;
 
 fn main() {
-    let res = request::head("https://doc.rust-lang.org/").unwrap();
+    let res = request::head("https://www.rust-lang.org/learn").unwrap();
 
     println!("Status: {} {}", res.status_code(), res.reason());
     println!("{:?}", res.headers());

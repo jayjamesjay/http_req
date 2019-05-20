@@ -1,9 +1,11 @@
 //!secure connection over TLS
 
 use crate::error::Error as HttpError;
-use std::fs::File;
-use std::io::{self, BufReader};
-use std::path::Path;
+use std::{
+    fs::File,
+    io::{self, BufReader},
+    path::Path,
+};
 
 #[cfg(feature = "native-tls")]
 use std::io::prelude::*;
