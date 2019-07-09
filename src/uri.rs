@@ -62,11 +62,27 @@ pub struct Uri {
 
 impl Uri {
     ///Returns scheme of this `Uri`.
+    ///
+    ///# Example
+    ///```
+    ///use http_req::uri::Uri;
+    ///
+    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///assert_eq!(uri.scheme(), "https");
+    ///```
     pub fn scheme(&self) -> &str {
         &self.inner[self.scheme]
     }
 
     ///Returns information about the user included in this `Uri`.
+    ///     
+    ///# Example
+    ///```
+    ///use http_req::uri::Uri;
+    ///
+    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///assert_eq!(uri.user_info(), Some("user:info"));
+    ///```
     pub fn user_info(&self) -> Option<&str> {
         match self.authority {
             Some(ref a) => a.user_info(),
@@ -75,6 +91,14 @@ impl Uri {
     }
 
     ///Returns host of this `Uri`.
+    ///     
+    ///# Example
+    ///```
+    ///use http_req::uri::Uri;
+    ///
+    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///assert_eq!(uri.host(), Some("foo.com"));
+    ///```
     pub fn host(&self) -> Option<&str> {
         match self.authority {
             Some(ref a) => Some(a.host()),
@@ -83,6 +107,14 @@ impl Uri {
     }
 
     ///Returns host of this `Uri` to use in a header.
+    ///     
+    ///# Example
+    ///```
+    ///use http_req::uri::Uri;
+    ///
+    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///assert_eq!(uri.host_header(), Some("foo.com:12".to_string()));
+    ///```
     pub fn host_header(&self) -> Option<String> {
         match self.host() {
             Some(h) => match self.corr_port() {
@@ -94,6 +126,14 @@ impl Uri {
     }
 
     ///Returns port of this `Uri`
+    ///     
+    ///# Example
+    ///```
+    ///use http_req::uri::Uri;
+    ///
+    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///assert_eq!(uri.port(), Some(12));
+    ///```
     pub fn port(&self) -> Option<u16> {
         match &self.authority {
             Some(a) => a.port(),
@@ -103,6 +143,14 @@ impl Uri {
 
     ///Returns port corresponding to this `Uri`.
     ///Returns default port if it hasn't been set in the uri.
+    ///  
+    ///# Example
+    ///```
+    ///use http_req::uri::Uri;
+    ///
+    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///assert_eq!(uri.corr_port(), 12);
+    ///```
     pub fn corr_port(&self) -> u16 {
         let default_port = match self.scheme() {
             "https" => HTTPS_PORT,
@@ -116,21 +164,53 @@ impl Uri {
     }
 
     ///Returns path of this `Uri`.
+    ///  
+    ///# Example
+    ///```
+    ///use http_req::uri::Uri;
+    ///
+    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///assert_eq!(uri.path(), Some("/bar/baz"));
+    ///```
     pub fn path(&self) -> Option<&str> {
         self.path.map(|r| &self.inner[r])
     }
 
     ///Returns query of this `Uri`.
+    ///  
+    ///# Example
+    ///```
+    ///use http_req::uri::Uri;
+    ///
+    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///assert_eq!(uri.query(), Some("query"));
+    ///```
     pub fn query(&self) -> Option<&str> {
         self.query.map(|r| &self.inner[r])
     }
 
     ///Returns fragment of this `Uri`.
+    ///  
+    ///# Example
+    ///```
+    ///use http_req::uri::Uri;
+    ///
+    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///assert_eq!(uri.fragment(), Some("fragment"));
+    ///```
     pub fn fragment(&self) -> Option<&str> {
         self.fragment.map(|r| &self.inner[r])
     }
 
     ///Returns resource `Uri` points to.
+    ///  
+    ///# Example
+    ///```
+    ///use http_req::uri::Uri;
+    ///
+    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///assert_eq!(uri.resource(), "/bar/baz?query#fragment");
+    ///```
     pub fn resource(&self) -> &str {
         let mut result = "/";
 
@@ -227,16 +307,40 @@ pub struct Authority {
 
 impl Authority {
     ///Returns username of this `Authority`
+    ///
+    ///# Example
+    ///```
+    ///use http_req::uri::Authority;
+    ///
+    ///let auth: Authority = "user:info@foo.com:443".parse().unwrap();
+    ///assert_eq!(auth.username(), Some("user"));
+    ///```
     pub fn username(&self) -> Option<&str> {
         self.username.map(|r| &self.inner[r])
     }
 
     ///Returns password of this `Authority`
+    ///
+    ///# Example
+    ///```
+    ///use http_req::uri::Authority;
+    ///
+    ///let auth: Authority = "user:info@foo.com:443".parse().unwrap();
+    ///assert_eq!(auth.password(), Some("info"));
+    ///```
     pub fn password(&self) -> Option<&str> {
         self.password.map(|r| &self.inner[r])
     }
 
     ///Returns information about the user
+    ///
+    ///# Example
+    ///```
+    ///use http_req::uri::Authority;
+    ///
+    ///let auth: Authority = "user:info@foo.com:443".parse().unwrap();
+    ///assert_eq!(auth.user_info(), Some("user:info"));
+    ///```
     pub fn user_info(&self) -> Option<&str> {
         match (&self.username, &self.password) {
             (Some(u), Some(p)) => Some(&self.inner[u.start..p.end]),
@@ -246,11 +350,27 @@ impl Authority {
     }
 
     ///Returns host of this `Authority`
+    /// 
+    ///# Example
+    ///```
+    ///use http_req::uri::Authority;
+    ///
+    ///let auth: Authority = "user:info@foo.com:443".parse().unwrap();
+    ///assert_eq!(auth.host(), "foo.com");
+    ///```
     pub fn host(&self) -> &str {
         &self.inner[self.host]
     }
 
     ///Returns port of this `Authority`
+    /// 
+    ///# Example
+    ///```
+    ///use http_req::uri::Authority;
+    ///
+    ///let auth: Authority = "user:info@foo.com:443".parse().unwrap();
+    ///assert_eq!(auth.port(), Some(443));
+    ///```
     pub fn port(&self) -> Option<u16> {
         match &self.port {
             Some(p) => Some(self.inner[*p].parse().unwrap()),

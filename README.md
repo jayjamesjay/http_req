@@ -4,7 +4,6 @@
 [![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.5.0/http_req/)
 
 Simple and lightweight HTTP client with built-in HTTPS support.
-Currently it's in heavy development and may frequently change.
 
 ## Requirements
 http_req by default uses [rust-native-tls](https://github.com/sfackler/rust-native-tls),
