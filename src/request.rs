@@ -110,6 +110,25 @@ pub struct RequestBuilder<'a> {
 
 impl<'a> RequestBuilder<'a> {
     ///Creates new `RequestBuilder` with default parameters
+    ///
+    ///# Examples
+    ///```
+    ///use std::net::TcpStream;
+    ///use http_req::{request::RequestBuilder, tls, uri::Uri};
+    ///
+    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let mut writer = Vec::new();
+    ///
+    ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+    ///let mut stream = tls::Config::default()
+    ///    .connect(addr.host().unwrap_or(""), stream)
+    ///    .unwrap();
+    ///
+    ///let response = RequestBuilder::new(&addr)
+    ///    .header("Connection", "Close")
+    ///    .send(&mut stream, &mut writer)
+    ///    .unwrap();
+    ///```
     pub fn new(uri: &'a Uri) -> RequestBuilder<'a> {
         RequestBuilder {
             headers: Headers::default_http(uri),
@@ -121,6 +140,26 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Sets request method
+    /// 
+    ///# Examples
+    ///```
+    ///use std::net::TcpStream;
+    ///use http_req::{request::{RequestBuilder, Method}, tls, uri::Uri};
+    ///
+    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let mut writer = Vec::new();
+    ///
+    ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+    ///let mut stream = tls::Config::default()
+    ///    .connect(addr.host().unwrap_or(""), stream)
+    ///    .unwrap();
+    ///
+    ///let response = RequestBuilder::new(&addr)
+    ///    .method(Method::HEAD)
+    ///    .header("Connection", "Close")
+    ///    .send(&mut stream, &mut writer)
+    ///    .unwrap();
+    ///```
     pub fn method<T>(&mut self, method: T) -> &mut Self
     where
         Method: From<T>,
@@ -130,6 +169,30 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Replaces all it's headers with headers passed to the function
+    /// 
+    ///# Examples
+    ///```
+    ///use std::net::TcpStream;
+    ///use http_req::{request::{RequestBuilder, Method}, response::Headers, tls, uri::Uri};
+    ///
+    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let mut writer = Vec::new();
+    ///let mut headers = Headers::new();
+    ///headers.insert("Accept-Charset", "utf-8");
+    ///headers.insert("Accept-Language", "en-US");
+    ///headers.insert("Host", "rust-lang.org");
+    ///headers.insert("Connection", "Close");
+    ///
+    ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+    ///let mut stream = tls::Config::default()
+    ///    .connect(addr.host().unwrap_or(""), stream)
+    ///    .unwrap();
+    ///
+    ///let response = RequestBuilder::new(&addr)
+    ///    .headers(headers)
+    ///    .send(&mut stream, &mut writer)
+    ///    .unwrap();
+    ///```
     pub fn headers<T>(&mut self, headers: T) -> &mut Self
     where
         Headers: From<T>,
@@ -139,6 +202,25 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Adds new header to existing/default headers
+    /// 
+    ///# Examples
+    ///```
+    ///use std::net::TcpStream;
+    ///use http_req::{request::{RequestBuilder, Method}, tls, uri::Uri};
+    ///
+    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let mut writer = Vec::new();
+    ///
+    ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+    ///let mut stream = tls::Config::default()
+    ///    .connect(addr.host().unwrap_or(""), stream)
+    ///    .unwrap();
+    ///
+    ///let response = RequestBuilder::new(&addr)
+    ///    .header("Connection", "Close")
+    ///    .send(&mut stream, &mut writer)
+    ///    .unwrap();
+    ///```
     pub fn header<T, U>(&mut self, key: &T, val: &U) -> &mut Self
     where
         T: ToString + ?Sized,
@@ -149,6 +231,28 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Sets body for request
+    /// 
+    ///# Examples
+    ///```
+    ///use std::net::TcpStream;
+    ///use http_req::{request::{RequestBuilder, Method}, tls, uri::Uri};
+    ///
+    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///const body: &[u8; 27] = b"field1=value1&field2=value2";
+    ///let mut writer = Vec::new();
+    ///
+    ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+    ///let mut stream = tls::Config::default()
+    ///    .connect(addr.host().unwrap_or(""), stream)
+    ///    .unwrap();
+    ///
+    ///let response = RequestBuilder::new(&addr)
+    ///    .method(Method::POST)
+    ///    .body(body)
+    ///    .header("Connection", "Close")
+    ///    .send(&mut stream, &mut writer)
+    ///    .unwrap();
+    ///```
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
         self.body = Some(body);
         self
@@ -159,6 +263,43 @@ impl<'a> RequestBuilder<'a> {
     ///- Writes request message to `stream`.
     ///- Writes response's body to `writer`.
     ///- Returns response for this request.
+    /// 
+    ///# Examples
+    /// 
+    ///HTTP
+    ///```
+    ///use std::net::TcpStream;
+    ///use http_req::{request::RequestBuilder, uri::Uri};
+    ///
+    /// //This address is automatically redirected to HTTPS, so response code will not ever be 200
+    ///let addr: Uri = "http://www.rust-lang.org/learn".parse().unwrap();
+    ///let mut writer = Vec::new();
+    ///let mut stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+    ///
+    ///let response = RequestBuilder::new(&addr)
+    ///    .header("Connection", "Close")
+    ///    .send(&mut stream, &mut writer)
+    ///    .unwrap();
+    ///```
+    /// 
+    ///HTTPS
+    ///```
+    ///use std::net::TcpStream;
+    ///use http_req::{request::RequestBuilder, tls, uri::Uri};
+    ///
+    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let mut writer = Vec::new();
+    ///
+    ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+    ///let mut stream = tls::Config::default()
+    ///    .connect(addr.host().unwrap_or(""), stream)
+    ///    .unwrap();
+    ///
+    ///let response = RequestBuilder::new(&addr)
+    ///    .header("Connection", "Close")
+    ///    .send(&mut stream, &mut writer)
+    ///    .unwrap();
+    ///```
     pub fn send<T, U>(&self, stream: &mut T, writer: &mut U) -> Result<Response, error::Error>
     where
         T: Write + Read,
@@ -288,7 +429,7 @@ impl<'a> Request<'a> {
     ///let mut headers = Headers::new();
     ///headers.insert("Accept-Charset", "utf-8");
     ///headers.insert("Accept-Language", "en-US");
-    ///headers.insert("Host", "doc.rust-lang.org");
+    ///headers.insert("Host", "rust-lang.org");
     ///headers.insert("Connection", "Close");
     ///
     ///let response = Request::new(&uri)
@@ -556,13 +697,12 @@ pub fn get<T: AsRef<str>, U: Write>(uri: T, writer: &mut U) -> Result<Response, 
 }
 
 ///Creates and sends HEAD request. Returns response for this request.
-/// 
+///
 ///# Examples
 ///```
 ///use http_req::request;
 ///
 ///const uri: &str = "https://www.rust-lang.org/learn";
-///
 ///let response = request::head(uri).unwrap();
 ///```
 pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {

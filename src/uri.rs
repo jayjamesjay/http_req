@@ -18,6 +18,14 @@ pub struct RangeC {
 }
 
 impl RangeC {
+    ///Creates new `RangeC` with `start` and `end`.
+    ///
+    ///# Exmaples 
+    ///```
+    ///use http_req::uri::RangeC;
+    /// 
+    ///const range: RangeC = RangeC::new(0, 20); 
+    ///```
     pub const fn new(start: usize, end: usize) -> RangeC {
         RangeC { start, end }
     }
