@@ -140,7 +140,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Sets request method
-    /// 
+    ///
     ///# Examples
     ///```
     ///use std::net::TcpStream;
@@ -169,7 +169,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Replaces all it's headers with headers passed to the function
-    /// 
+    ///
     ///# Examples
     ///```
     ///use std::net::TcpStream;
@@ -202,7 +202,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Adds new header to existing/default headers
-    /// 
+    ///
     ///# Examples
     ///```
     ///use std::net::TcpStream;
@@ -231,7 +231,7 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Sets body for request
-    /// 
+    ///
     ///# Examples
     ///```
     ///use std::net::TcpStream;
@@ -263,9 +263,9 @@ impl<'a> RequestBuilder<'a> {
     ///- Writes request message to `stream`.
     ///- Writes response's body to `writer`.
     ///- Returns response for this request.
-    /// 
+    ///
     ///# Examples
-    /// 
+    ///
     ///HTTP
     ///```
     ///use std::net::TcpStream;
@@ -281,7 +281,7 @@ impl<'a> RequestBuilder<'a> {
     ///    .send(&mut stream, &mut writer)
     ///    .unwrap();
     ///```
-    /// 
+    ///
     ///HTTPS
     ///```
     ///use std::net::TcpStream;

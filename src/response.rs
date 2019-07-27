@@ -158,7 +158,7 @@ impl Response {
 
     ///Returns length of the content of this `Response` as a `Result`, according to information
     ///included in headers. If there is no such an information, returns `Ok(0)`.
-    /// 
+    ///
     ///# Examples
     ///```
     ///use http_req::response::Response;
