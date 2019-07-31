@@ -408,16 +408,11 @@ impl str::FromStr for Authority {
             Some(RangeC::new(0, s.len()))
         };
 
-        let mut split_by = ":";
-
-        if let Some(r) = uri_part {
-            let range = Range::from(r);
-
-            if s[range.clone()].contains(']') && s[range].contains('[') {
-                split_by = "]:";
-            }
-        }
-
+        let split_by = if s.contains(']') && s.contains('[') {
+            "]:"
+        } else {
+            ":"
+        };
         let (host, port) = get_chunks(&s, uri_part, split_by);
         let host = host.ok_or(ParseErr::UriErr)?;
 
@@ -473,9 +468,9 @@ fn get_chunks<'a>(
 
         match s[range.clone()].find(separator) {
             Some(i) => {
-                let len = r.start + i + separator.len();
-                let before = Some(RangeC::new(r.start, len - 1)).filter(|r| r.start != r.end);
-                let after = Some(RangeC::new(len, r.end)).filter(|r| r.start != r.end);
+                let mid = r.start + i + separator.len();
+                let before = Some(RangeC::new(r.start, mid - 1)).filter(|r| r.start != r.end);
+                let after = Some(RangeC::new(mid, r.end)).filter(|r| r.start != r.end);
 
                 (before, after)
             }
