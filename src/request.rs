@@ -930,6 +930,7 @@ mod tests {
         };
     }
 
+    #[ignore]
     #[test]
     fn request_read_timeout() {
         let uri = URI.parse().unwrap();
