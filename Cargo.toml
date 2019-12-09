@@ -23,6 +23,7 @@ optional = true
 
 [dependencies.rustls]
 version = "^0.16"
+git = "https://github.com/CedricCouton/rustls"
 optional = true
 
 [dependencies.webpki]
