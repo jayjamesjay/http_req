@@ -23,7 +23,7 @@ pub struct Conn<S: io::Read + io::Write> {
     stream: native_tls::TlsStream<S>,
 
     #[cfg(feature = "rust-tls")]
-    stream: rustls::StreamOwned<rustls::ClientSession, S>,
+    pub stream: rustls::StreamOwned<rustls::ClientSession, S>,
 }
 
 impl<S: io::Read + io::Write> io::Read for Conn<S> {
