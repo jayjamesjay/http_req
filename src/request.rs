@@ -5,13 +5,8 @@ use crate::{
     tls,
     uri::Uri,
 };
-use std::{
-    fmt,
-    io::{self, Read, Write},
-    net::{TcpStream, ToSocketAddrs},
-    path::Path,
-    time::Duration,
-};
+use std::{fmt, io::{self, Read, Write}, net::{TcpStream, ToSocketAddrs}, path::Path, time::Duration};
+use std::num::ParseIntError;
 
 const CR_LF: &str = "\r\n";
 const HTTP_V: &str = "HTTP/1.1";
@@ -307,8 +302,12 @@ impl<'a> RequestBuilder<'a> {
     {
         self.write_msg(stream, &self.parse_msg())?;
         let res = self.read_head(stream)?;
-
-        if self.method != Method::HEAD {
+        if let Some(length) = res.headers().get("Content-length") {
+            let mut data: Vec<u8> = vec![];
+            data.resize(length.parse().map_err(|e: ParseIntError| error::Error::Parse(e.into()))?, 0);
+            stream.read_exact(data.as_mut_slice())?;
+            writer.write_all(data.as_slice())?;
+        } else {
             io::copy(stream, writer)?;
         }
 
