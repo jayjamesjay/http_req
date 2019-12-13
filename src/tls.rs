@@ -23,7 +23,7 @@ pub struct Conn<S: io::Read + io::Write> {
     stream: native_tls::TlsStream<S>,
 
     #[cfg(feature = "rust-tls")]
-    stream: rustls::StreamOwned<rustls::ClientSession, S>,
+    pub stream: rustls::StreamOwned<rustls::ClientSession, S>,
 }
 
 impl<S: io::Read + io::Write> io::Read for Conn<S> {
@@ -146,7 +146,7 @@ impl Config {
         let session = ClientSession::new(
             &self.client_config,
             webpki::DNSNameRef::try_from_ascii_str(hostname.as_ref())
-                .map_err(|()| HttpError::Tls)?,
+                .map_err(|_| HttpError::Tls)?,
         );
         let stream = StreamOwned::new(session, stream);
 
