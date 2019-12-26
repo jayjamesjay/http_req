@@ -14,7 +14,6 @@ use std::{
 };
 
 const CR_LF: &str = "\r\n";
-const HTTP_V: &str = "HTTP/1.1";
 
 ///Copies data from `reader` to `writer` until the specified `val`ue is reached.
 ///Returns how many bytes has been read.
@@ -74,6 +73,30 @@ impl fmt::Display for Method {
     }
 }
 
+///HTTP version methods
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum HttpVersion {
+    Http10,
+    Http11,
+    Http20,
+}
+
+impl HttpVersion {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            HttpVersion::Http10 => "HTTP/1.0",
+            HttpVersion::Http11 => "HTTP/1.1",
+            HttpVersion::Http20 => "HTTP/2.0",
+        }
+    }
+}
+
+impl fmt::Display for HttpVersion {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 ///Relatively low-level struct for making HTTP requests.
 ///
 ///It can work with any stream that implements `Read` and `Write`.
@@ -103,7 +126,7 @@ impl fmt::Display for Method {
 pub struct RequestBuilder<'a> {
     uri: &'a Uri,
     method: Method,
-    version: &'a str,
+    version: HttpVersion,
     headers: Headers,
     body: Option<&'a [u8]>,
 }
@@ -134,7 +157,7 @@ impl<'a> RequestBuilder<'a> {
             headers: Headers::default_http(uri),
             uri,
             method: Method::GET,
-            version: HTTP_V,
+            version: HttpVersion::Http11,
             body: None,
         }
     }
@@ -165,6 +188,34 @@ impl<'a> RequestBuilder<'a> {
         Method: From<T>,
     {
         self.method = Method::from(method);
+        self
+    }
+
+    ///Sets HTTP version
+    ///
+    ///# Examples
+    ///```
+    ///use std::net::TcpStream;
+    ///use http_req::{request::{RequestBuilder, HttpVersion}, tls, uri::Uri};
+    ///
+    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let mut writer = Vec::new();
+    ///
+    ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+    ///let mut stream = tls::Config::default()
+    ///    .connect(addr.host().unwrap_or(""), stream)
+    ///    .unwrap();
+    ///
+    ///let response = RequestBuilder::new(&addr)
+    ///    .version(HttpVersion::Http10)
+    ///    .header("Connection", "Close")
+    ///    .send(&mut stream, &mut writer)
+    ///    .unwrap();
+    ///```
+
+    pub fn version(&mut self, version: HttpVersion) -> &mut Self
+    {
+        self.version = version;
         self
     }
 
