@@ -213,8 +213,7 @@ impl<'a> RequestBuilder<'a> {
     ///    .unwrap();
     ///```
 
-    pub fn version(&mut self, version: HttpVersion) -> &mut Self
-    {
+    pub fn version(&mut self, version: HttpVersion) -> &mut Self {
         self.version = version;
         self
     }
