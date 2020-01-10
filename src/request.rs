@@ -73,7 +73,7 @@ impl fmt::Display for Method {
     }
 }
 
-///HTTP version methods
+///HTTP versions
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum HttpVersion {
     Http10,
@@ -213,8 +213,11 @@ impl<'a> RequestBuilder<'a> {
     ///    .unwrap();
     ///```
 
-    pub fn version(&mut self, version: HttpVersion) -> &mut Self {
-        self.version = version;
+    pub fn version<T>(&mut self, version: T) -> &mut Self
+    where
+        HttpVersion: From<T>,
+    {
+        self.version = HttpVersion::from(version);
         self
     }
 
@@ -467,6 +470,51 @@ impl<'a> Request<'a> {
         }
     }
 
+    ///Sets request method
+    ///
+    ///# Examples
+    ///```
+    ///use http_req::{request::{Request, Method}, uri::Uri};
+    ///
+    ///let mut writer = Vec::new();
+    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///
+    ///let response = Request::new(&uri)
+    ///    .method(Method::HEAD)
+    ///    .send(&mut writer)
+    ///    .unwrap();
+    ///```
+    pub fn method<T>(&mut self, method: T) -> &mut Self
+    where
+        Method: From<T>,
+    {
+        self.inner.method(method);
+        self
+    }
+
+    ///Sets HTTP version
+    ///
+    ///# Examples
+    ///```
+    ///use http_req::{request::{Request, HttpVersion}, uri::Uri};
+    ///
+    ///let mut writer = Vec::new();
+    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///
+    ///let response = Request::new(&uri)
+    ///    .version(HttpVersion::Http10)
+    ///    .send(&mut writer)
+    ///    .unwrap();
+    ///```
+
+    pub fn version<T>(&mut self, version: T) -> &mut Self
+    where
+        HttpVersion: From<T>,
+    {
+        self.inner.version(version);
+        self
+    }
+
     ///Replaces all it's headers with headers passed to the function
     ///
     ///# Examples
@@ -492,7 +540,6 @@ impl<'a> Request<'a> {
         Headers: From<T>,
     {
         self.inner.headers(headers);
-
         self
     }
 
@@ -519,28 +566,6 @@ impl<'a> Request<'a> {
         self
     }
 
-    ///Changes request's method
-    ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::{Request, Method}, uri::Uri};
-    ///
-    ///let mut writer = Vec::new();
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
-    ///
-    ///let response = Request::new(&uri)
-    ///    .method(Method::HEAD)
-    ///    .send(&mut writer)
-    ///    .unwrap();
-    ///```
-    pub fn method<T>(&mut self, method: T) -> &mut Self
-    where
-        Method: From<T>,
-    {
-        self.inner.method(method);
-        self
-    }
-
     ///Sets body for request
     ///
     ///# Examples
@@ -559,7 +584,6 @@ impl<'a> Request<'a> {
     ///```
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
         self.inner.body(body);
-
         self
     }
 
@@ -568,7 +592,7 @@ impl<'a> Request<'a> {
     ///- If there is a timeout, it will be passed to
     ///  [`TcpStream::connect_timeout`][TcpStream::connect_timeout].
     ///- If `None` is provided, [`TcpStream::connect`][TcpStream::connect] will
-    ///  be used, and it will _not_ time out.
+    ///  be used. Timeot will depend on the platform.
     ///
     ///[TcpStream::connect]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect
     ///[TcpStream::connect_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect_timeout
