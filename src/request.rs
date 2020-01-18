@@ -32,7 +32,7 @@ where
         buf.push(byte?);
         read += 1;
 
-        if &buf[(buf.len() - val.len())..] == val {
+        if buf.ends_with(val) {
             break;
         }
     }
@@ -592,7 +592,8 @@ impl<'a> Request<'a> {
     ///- If there is a timeout, it will be passed to
     ///  [`TcpStream::connect_timeout`][TcpStream::connect_timeout].
     ///- If `None` is provided, [`TcpStream::connect`][TcpStream::connect] will
-    ///  be used. Timeot will depend on the platform.
+    ///  be used. A timeout will still be enforced by the operating system, but
+    ///  the exact value depends on the platform.
     ///
     ///[TcpStream::connect]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect
     ///[TcpStream::connect_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect_timeout
