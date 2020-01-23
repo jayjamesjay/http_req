@@ -3,11 +3,15 @@ use crate::{
     error::{Error, ParseErr},
     uri::Uri,
 };
+#[cfg(feature = "async")]
+use async_std::io::prelude::{Write, WriteExt};
+#[cfg(not(feature = "async"))]
+use std::io::Write;
+#[cfg(feature = "async")]
+use std::marker::Unpin;
 use std::{
     collections::{hash_map, HashMap},
-    fmt,
-    io::Write,
-    str,
+    fmt, str,
 };
 use unicase::Ascii;
 
@@ -60,6 +64,7 @@ impl Response {
     ///
     ///let response = Response::try_from(RESPONSE, &mut body).unwrap();
     ///```
+    #[cfg(not(feature = "async"))]
     pub fn try_from<T: Write>(res: &[u8], writer: &mut T) -> Result<Response, Error> {
         if res.is_empty() {
             Err(Error::Parse(ParseErr::Empty))
@@ -71,6 +76,38 @@ impl Response {
 
             let response = Self::from_head(&res[..pos])?;
             writer.write_all(&res[pos..])?;
+
+            Ok(response)
+        }
+    }
+
+    ///Parses `Response` from slice of bytes. Writes it's body to `writer`.
+    ///
+    ///# Examples
+    ///```
+    ///use http_req::response::Response;
+    ///
+    ///const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
+    ///                             Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+    ///                             Content-Type: text/html\r\n\
+    ///                             Content-Length: 100\r\n\r\n\
+    ///                             <html>hello\r\n\r\nhello</html>";
+    ///let mut body = Vec::new();
+    ///
+    ///let response = Response::try_from(RESPONSE, &mut body).unwrap();
+    ///```
+    #[cfg(feature = "async")]
+    pub async fn try_from<T: Write + Unpin>(res: &[u8], writer: &mut T) -> Result<Response, Error> {
+        if res.is_empty() {
+            Err(Error::Parse(ParseErr::Empty))
+        } else {
+            let mut pos = res.len();
+            if let Some(v) = find_slice(res, &CR_LF_2) {
+                pos = v;
+            }
+
+            let response = Self::from_head(&res[..pos])?;
+            writer.write_all(&res[pos..]).await?;
 
             Ok(response)
         }
@@ -870,72 +907,149 @@ mod tests {
     fn res_from_head() {
         Response::from_head(RESPONSE_H).unwrap();
     }
+    #[cfg(not(feature = "async"))]
+    mod sync {
+        use super::*;
 
-    #[test]
-    fn res_try_from() {
-        let mut writer = Vec::new();
+        #[test]
+        fn res_try_from() {
+            let mut writer = Vec::new();
 
-        Response::try_from(RESPONSE, &mut writer).unwrap();
-        Response::try_from(RESPONSE_H, &mut writer).unwrap();
+            Response::try_from(RESPONSE, &mut writer).unwrap();
+            Response::try_from(RESPONSE_H, &mut writer).unwrap();
+        }
+
+        #[test]
+        #[should_panic]
+        fn res_from_empty() {
+            let mut writer = Vec::new();
+            Response::try_from(&[], &mut writer).unwrap();
+        }
+
+        #[test]
+        fn res_status_code() {
+            let mut writer = Vec::new();
+            let res = Response::try_from(RESPONSE, &mut writer).unwrap();
+
+            assert_eq!(res.status_code(), CODE_S);
+        }
+
+        #[test]
+        fn res_version() {
+            let mut writer = Vec::new();
+            let res = Response::try_from(RESPONSE, &mut writer).unwrap();
+
+            assert_eq!(res.version(), "HTTP/1.1");
+        }
+
+        #[test]
+        fn res_reason() {
+            let mut writer = Vec::new();
+            let res = Response::try_from(RESPONSE, &mut writer).unwrap();
+
+            assert_eq!(res.reason(), "OK");
+        }
+
+        #[test]
+        fn res_headers() {
+            let mut writer = Vec::new();
+            let res = Response::try_from(RESPONSE, &mut writer).unwrap();
+
+            let mut headers = Headers::with_capacity(2);
+            headers.insert("Date", "Sat, 11 Jan 2003 02:44:04 GMT");
+            headers.insert("Content-Type", "text/html");
+            headers.insert("Content-Length", "100");
+
+            assert_eq!(res.headers(), &Headers::from(headers));
+        }
+
+        #[test]
+        fn res_content_len() {
+            let mut writer = Vec::with_capacity(101);
+            let res = Response::try_from(RESPONSE, &mut writer).unwrap();
+
+            assert_eq!(res.content_len(), Ok(100));
+        }
+
+        #[test]
+        fn res_body() {
+            let mut writer = Vec::new();
+            Response::try_from(RESPONSE, &mut writer).unwrap();
+
+            assert_eq!(writer, BODY);
+        }
     }
 
-    #[test]
-    #[should_panic]
-    fn res_from_empty() {
-        let mut writer = Vec::new();
-        Response::try_from(&[], &mut writer).unwrap();
-    }
+    #[cfg(feature = "async")]
+    mod not_sync {
+        use super::*;
 
-    #[test]
-    fn res_status_code() {
-        let mut writer = Vec::new();
-        let res = Response::try_from(RESPONSE, &mut writer).unwrap();
+        #[async_std::test]
+        async fn res_try_from() {
+            let mut writer = Vec::new();
 
-        assert_eq!(res.status_code(), CODE_S);
-    }
+            Response::try_from(RESPONSE, &mut writer).await.unwrap();
+            Response::try_from(RESPONSE_H, &mut writer).await.unwrap();
+        }
 
-    #[test]
-    fn res_version() {
-        let mut writer = Vec::new();
-        let res = Response::try_from(RESPONSE, &mut writer).unwrap();
+        #[async_std::test]
+        #[should_panic]
+        async fn res_from_empty() {
+            let mut writer = Vec::new();
+            Response::try_from(&[], &mut writer).await.unwrap();
+        }
 
-        assert_eq!(res.version(), "HTTP/1.1");
-    }
+        #[async_std::test]
+        async fn res_status_code() {
+            let mut writer = Vec::new();
+            let res = Response::try_from(RESPONSE, &mut writer).await.unwrap();
 
-    #[test]
-    fn res_reason() {
-        let mut writer = Vec::new();
-        let res = Response::try_from(RESPONSE, &mut writer).unwrap();
+            assert_eq!(res.status_code(), CODE_S);
+        }
 
-        assert_eq!(res.reason(), "OK");
-    }
+        #[async_std::test]
+        async fn res_version() {
+            let mut writer = Vec::new();
+            let res = Response::try_from(RESPONSE, &mut writer).await.unwrap();
 
-    #[test]
-    fn res_headers() {
-        let mut writer = Vec::new();
-        let res = Response::try_from(RESPONSE, &mut writer).unwrap();
+            assert_eq!(res.version(), "HTTP/1.1");
+        }
 
-        let mut headers = Headers::with_capacity(2);
-        headers.insert("Date", "Sat, 11 Jan 2003 02:44:04 GMT");
-        headers.insert("Content-Type", "text/html");
-        headers.insert("Content-Length", "100");
+        #[async_std::test]
+        async fn res_reason() {
+            let mut writer = Vec::new();
+            let res = Response::try_from(RESPONSE, &mut writer).await.unwrap();
 
-        assert_eq!(res.headers(), &Headers::from(headers));
-    }
+            assert_eq!(res.reason(), "OK");
+        }
 
-    #[test]
-    fn res_content_len() {
-        let mut writer = Vec::with_capacity(101);
-        let res = Response::try_from(RESPONSE, &mut writer).unwrap();
+        #[async_std::test]
+        async fn res_headers() {
+            let mut writer = Vec::new();
+            let res = Response::try_from(RESPONSE, &mut writer).await.unwrap();
 
-        assert_eq!(res.content_len(), Ok(100));
-    }
+            let mut headers = Headers::with_capacity(2);
+            headers.insert("Date", "Sat, 11 Jan 2003 02:44:04 GMT");
+            headers.insert("Content-Type", "text/html");
+            headers.insert("Content-Length", "100");
 
-    #[test]
-    fn res_body() {
-        let mut writer = Vec::new();
-        Response::try_from(RESPONSE, &mut writer).unwrap();
+            assert_eq!(res.headers(), &Headers::from(headers));
+        }
 
-        assert_eq!(writer, BODY);
+        #[async_std::test]
+        async fn res_content_len() {
+            let mut writer = Vec::with_capacity(101);
+            let res = Response::try_from(RESPONSE, &mut writer).await.unwrap();
+
+            assert_eq!(res.content_len(), Ok(100));
+        }
+
+        #[async_std::test]
+        async fn res_body() {
+            let mut writer = Vec::new();
+            Response::try_from(RESPONSE, &mut writer).await.unwrap();
+
+            assert_eq!(writer, BODY);
+        }
     }
 }

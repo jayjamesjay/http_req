@@ -1,0 +1,9 @@
+[package]
+name = "get_async"
+version = "1.0.0"
+authors = ["jayjamesjay"]
+edition = "2018"
+
+[dependencies.http_req]
+path = "../../"
+features = ["async"]

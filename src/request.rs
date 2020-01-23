@@ -1,22 +1,33 @@
 //! creating and sending HTTP requests
+#[cfg(any(feature = "native-tls", feature = "rust-tls"))]
+#[cfg(not(feature = "async"))]
+use crate::tls;
 use crate::{
     error,
     response::{Headers, Response, CR_LF_2},
-    tls,
     uri::Uri,
 };
+#[cfg(feature = "async")]
+use async_std::{
+    io::prelude::{Read, ReadExt, Write, WriteExt},
+    io::{copy as async_copy, timeout as io_timeout},
+    net::{SocketAddr, TcpStream, ToSocketAddrs},
+    stream::StreamExt,
+};
+#[cfg(feature = "async")]
+use std::marker::Unpin;
+use std::{fmt, io, path::Path, time::Duration};
+#[cfg(not(feature = "async"))]
 use std::{
-    fmt,
-    io::{self, Read, Write},
+    io::{Read, Write},
     net::{TcpStream, ToSocketAddrs},
-    path::Path,
-    time::Duration,
 };
 
 const CR_LF: &str = "\r\n";
 
 ///Copies data from `reader` to `writer` until the specified `val`ue is reached.
 ///Returns how many bytes has been read.
+#[cfg(not(feature = "async"))]
 pub fn copy_until<R, W>(reader: &mut R, writer: &mut W, val: &[u8]) -> Result<usize, io::Error>
 where
     R: Read + ?Sized,
@@ -39,6 +50,40 @@ where
 
     writer.write_all(&buf)?;
     writer.flush()?;
+
+    Ok(read)
+}
+
+///Copies data from `reader` to `writer` until the specified `val`ue is reached.
+///Returns how many bytes has been read.
+#[cfg(feature = "async")]
+pub async fn copy_until<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    val: &[u8],
+) -> Result<usize, io::Error>
+where
+    R: Read + ?Sized + Unpin,
+    W: Write + ?Sized + Unpin,
+{
+    let mut buf = Vec::with_capacity(200);
+
+    let mut pre_buf = [0; 10];
+    let mut read = reader.read(&mut pre_buf).await?;
+    buf.extend(&pre_buf[..read]);
+
+    let mut stream = reader.bytes();
+    while let Some(byte) = stream.next().await {
+        buf.push(byte?);
+        read += 1;
+
+        if buf.ends_with(val) {
+            break;
+        }
+    }
+
+    writer.write_all(&buf).await?;
+    writer.flush().await?;
 
     Ok(read)
 }
@@ -353,6 +398,7 @@ impl<'a> RequestBuilder<'a> {
     ///    .send(&mut stream, &mut writer)
     ///    .unwrap();
     ///```
+    #[cfg(not(feature = "async"))]
     pub fn send<T, U>(&self, stream: &mut T, writer: &mut U) -> Result<Response, error::Error>
     where
         T: Write + Read,
@@ -368,7 +414,24 @@ impl<'a> RequestBuilder<'a> {
         Ok(res)
     }
 
+    #[cfg(feature = "async")]
+    pub async fn send<T, U>(&self, stream: &mut T, writer: &mut U) -> Result<Response, error::Error>
+    where
+        T: Write + Read + Unpin,
+        U: Write + Unpin,
+    {
+        self.write_msg(stream, &self.parse_msg()).await?;
+        let res = self.read_head(stream).await?;
+
+        if self.method != Method::HEAD {
+            async_copy(stream, writer).await?;
+        }
+
+        Ok(res)
+    }
+
     ///Writes message to `stream` and flushes it
+    #[cfg(not(feature = "async"))]
     pub fn write_msg<T, U>(&self, stream: &mut T, msg: &U) -> Result<(), io::Error>
     where
         T: Write,
@@ -380,10 +443,35 @@ impl<'a> RequestBuilder<'a> {
         Ok(())
     }
 
+    ///Writes message to `stream` and flushes it
+    #[cfg(feature = "async")]
+    pub async fn write_msg<T, U>(&self, stream: &mut T, msg: &U) -> Result<(), io::Error>
+    where
+        T: Write + Unpin,
+        U: AsRef<[u8]>,
+    {
+        stream.write_all(msg.as_ref()).await?;
+        stream.flush().await?;
+        Ok(())
+    }
+
     ///Reads head of server's response
+    #[cfg(not(feature = "async"))]
     pub fn read_head<T: Read>(&self, stream: &mut T) -> Result<Response, error::Error> {
         let mut head = Vec::with_capacity(200);
         copy_until(stream, &mut head, &CR_LF_2)?;
+
+        Response::from_head(&head)
+    }
+
+    ///Reads head of server's response
+    #[cfg(feature = "async")]
+    pub async fn read_head<T: Read + Unpin>(
+        &self,
+        stream: &mut T,
+    ) -> Result<Response, error::Error> {
+        let mut head = Vec::with_capacity(200);
+        copy_until(stream, &mut head, &CR_LF_2).await?;
 
         Response::from_head(&head)
     }
@@ -698,6 +786,7 @@ impl<'a> Request<'a> {
     ///
     ///let response = Request::new(&uri).send(&mut writer).unwrap();
     ///```
+    #[cfg(not(feature = "async"))]
     pub fn send<T: Write>(&self, writer: &mut T) -> Result<Response, error::Error> {
         let host = self.inner.uri.host().unwrap_or("");
         let port = self.inner.uri.corr_port();
@@ -721,9 +810,33 @@ impl<'a> Request<'a> {
             self.inner.send(&mut stream, writer)
         }
     }
+
+    #[cfg(feature = "async")]
+    pub async fn send<T: Write + Unpin>(&self, writer: &mut T) -> Result<Response, error::Error> {
+        use async_tls::TlsConnector;
+        let host = self.inner.uri.host().unwrap_or("");
+        let port = self.inner.uri.corr_port();
+        let mut stream = match self.connect_timeout {
+            Some(timeout) => connect_timeout(host, port, timeout).await?,
+            None => TcpStream::connect((host, port)).await?,
+        };
+
+        //FIXME: needs to be implemented in requestbuilder.send
+        //stream.set_read_timeout(self.read_timeout)?;
+        //stream.set_write_timeout(self.write_timeout)?;
+
+        if self.inner.uri.scheme() == "https" {
+            let connector = TlsConnector::default();
+            let mut stream = connector.connect(host, stream)?.await?;
+            self.inner.send(&mut stream, writer).await
+        } else {
+            self.inner.send(&mut stream, writer).await
+        }
+    }
 }
 
 ///Connects to target host with a timeout
+#[cfg(not(feature = "async"))]
 pub fn connect_timeout<T, U>(host: T, port: u16, timeout: U) -> io::Result<TcpStream>
 where
     Duration: From<U>,
@@ -754,6 +867,44 @@ where
     ))
 }
 
+#[cfg(feature = "async")]
+//TODO: remove when https://github.com/async-rs/async-std/pull/507/commits/ef9fe7d78bf0030546693b95907c6382ea4df5e5 gets merged
+pub async fn connect_timeout_fill(addr: &SocketAddr, timeout: Duration) -> io::Result<TcpStream> {
+    io_timeout(timeout, async move { TcpStream::connect(addr).await }).await
+}
+
+///Connects to target host with a timeout
+#[cfg(feature = "async")]
+pub async fn connect_timeout<T, U>(host: T, port: u16, timeout: U) -> io::Result<TcpStream>
+where
+    Duration: From<U>,
+    T: AsRef<str>,
+{
+    let host = host.as_ref();
+    let timeout = Duration::from(timeout);
+    let addrs: Vec<_> = (host, port).to_socket_addrs().await?.collect();
+    let count = addrs.len();
+
+    for (idx, addr) in addrs.into_iter().enumerate() {
+        match connect_timeout_fill(&addr, timeout).await {
+            Ok(stream) => return Ok(stream),
+            Err(err) => match err.kind() {
+                io::ErrorKind::TimedOut => return Err(err),
+                _ => {
+                    if idx + 1 == count {
+                        return Err(err);
+                    }
+                }
+            },
+        };
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::AddrNotAvailable,
+        format!("Could not resolve address for {:?}", host),
+    ))
+}
+
 ///Creates and sends GET request. Returns response for this request.
 ///
 ///# Examples
@@ -765,10 +916,20 @@ where
 ///
 ///let response = request::get(uri, &mut writer).unwrap();
 ///```
+#[cfg(not(feature = "async"))]
 pub fn get<T: AsRef<str>, U: Write>(uri: T, writer: &mut U) -> Result<Response, error::Error> {
     let uri = uri.as_ref().parse::<Uri>()?;
 
     Request::new(&uri).send(writer)
+}
+
+#[cfg(feature = "async")]
+pub async fn get<T: AsRef<str>, U: Write + Unpin>(
+    uri: T,
+    writer: &mut U,
+) -> Result<Response, error::Error> {
+    let uri = uri.as_ref().parse::<Uri>()?;
+    Request::new(&uri).send(writer).await
 }
 
 ///Creates and sends HEAD request. Returns response for this request.
@@ -780,6 +941,7 @@ pub fn get<T: AsRef<str>, U: Write>(uri: T, writer: &mut U) -> Result<Response, 
 ///const uri: &str = "https://www.rust-lang.org/learn";
 ///let response = request::head(uri).unwrap();
 ///```
+#[cfg(not(feature = "async"))]
 pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
     let mut writer = Vec::new();
     let uri = uri.as_ref().parse::<Uri>()?;
@@ -787,11 +949,20 @@ pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
     Request::new(&uri).method(Method::HEAD).send(&mut writer)
 }
 
+#[cfg(feature = "async")]
+pub async fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
+    let mut writer = Vec::new();
+    let uri = uri.as_ref().parse::<Uri>()?;
+    Request::new(&uri)
+        .method(Method::HEAD)
+        .send(&mut writer)
+        .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{error::Error, response::StatusCode};
-    use std::io::Cursor;
 
     const UNSUCCESS_CODE: StatusCode = StatusCode::new(400);
     const URI: &str = "http://doc.rust-lang.org/std/string/index.html";
@@ -808,19 +979,6 @@ mod tests {
                                            Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
                                            Content-Type: text/html\r\n\
                                            Content-Length: 100\r\n\r\n";
-
-    #[test]
-    fn copy_data_until() {
-        let mut reader = Vec::new();
-        reader.extend(&RESPONSE[..]);
-
-        let mut reader = Cursor::new(reader);
-        let mut writer = Vec::new();
-
-        copy_until(&mut reader, &mut writer, &CR_LF_2).unwrap();
-        assert_eq!(writer, &RESPONSE_H[..]);
-    }
-
     #[test]
     fn method_display() {
         const METHOD: Method = Method::HEAD;
@@ -831,15 +989,6 @@ mod tests {
     fn request_b_new() {
         RequestBuilder::new(&URI.parse().unwrap());
         RequestBuilder::new(&URI_S.parse().unwrap());
-    }
-
-    #[test]
-    fn request_b_method() {
-        let uri: Uri = URI.parse().unwrap();
-        let mut req = RequestBuilder::new(&uri);
-        let req = req.method(Method::HEAD);
-
-        assert_eq!(req.method, Method::HEAD);
     }
 
     #[test]
@@ -855,6 +1004,15 @@ mod tests {
         let req = req.headers(headers.clone());
 
         assert_eq!(req.headers, headers);
+    }
+
+    #[test]
+    fn request_b_method() {
+        let uri: Uri = URI.parse().unwrap();
+        let mut req = RequestBuilder::new(&uri);
+        let req = req.method(Method::HEAD);
+
+        assert_eq!(req.method, Method::HEAD);
     }
 
     #[test]
@@ -881,36 +1039,6 @@ mod tests {
         let req = req.body(&BODY);
 
         assert_eq!(req.body, Some(BODY.as_ref()));
-    }
-
-    #[ignore]
-    #[test]
-    fn request_b_send() {
-        let mut writer = Vec::new();
-        let uri: Uri = URI.parse().unwrap();
-        let mut stream = TcpStream::connect((uri.host().unwrap_or(""), uri.corr_port())).unwrap();
-
-        RequestBuilder::new(&URI.parse().unwrap())
-            .header("Connection", "Close")
-            .send(&mut stream, &mut writer)
-            .unwrap();
-    }
-
-    #[ignore]
-    #[test]
-    fn request_b_send_secure() {
-        let mut writer = Vec::new();
-        let uri: Uri = URI_S.parse().unwrap();
-
-        let stream = TcpStream::connect((uri.host().unwrap_or(""), uri.corr_port())).unwrap();
-        let mut secure_stream = tls::Config::default()
-            .connect(uri.host().unwrap_or(""), stream)
-            .unwrap();
-
-        RequestBuilder::new(&URI_S.parse().unwrap())
-            .header("Connection", "Close")
-            .send(&mut secure_stream, &mut writer)
-            .unwrap();
     }
 
     #[test]
@@ -991,43 +1119,6 @@ mod tests {
     }
 
     #[test]
-    fn request_connect_timeout() {
-        let uri = URI.parse().unwrap();
-        let mut request = Request::new(&uri);
-        request.connect_timeout(Some(Duration::from_nanos(1)));
-
-        assert_eq!(request.connect_timeout, Some(Duration::from_nanos(1)));
-
-        let err = request.send(&mut io::sink()).unwrap_err();
-        match err {
-            Error::IO(err) => assert_eq!(err.kind(), io::ErrorKind::TimedOut),
-            other => panic!("Expected error to be io::Error, got: {:?}", other),
-        };
-    }
-
-    #[ignore]
-    #[test]
-    fn request_read_timeout() {
-        let uri = URI.parse().unwrap();
-        let mut request = Request::new(&uri);
-        request.read_timeout(Some(Duration::from_nanos(1)));
-
-        assert_eq!(request.read_timeout, Some(Duration::from_nanos(1)));
-
-        let err = request.send(&mut io::sink()).unwrap_err();
-        match err {
-            Error::IO(err) => match err.kind() {
-                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => {}
-                other => panic!(
-                    "Expected error kind to be one of WouldBlock/TimedOut, got: {:?}",
-                    other
-                ),
-            },
-            other => panic!("Expected error to be io::Error, got: {:?}", other),
-        };
-    }
-
-    #[test]
     fn request_write_timeout() {
         let uri = URI.parse().unwrap();
         let mut request = Request::new(&uri);
@@ -1036,36 +1127,231 @@ mod tests {
         assert_eq!(request.write_timeout, Some(Duration::from_nanos(100)));
     }
 
-    #[test]
-    fn request_send() {
-        let mut writer = Vec::new();
-        let uri = URI.parse().unwrap();
-        let res = Request::new(&uri).send(&mut writer).unwrap();
+    #[cfg(not(feature = "async"))]
+    mod sync {
+        use super::*;
+        use std::io::Cursor;
 
-        assert_ne!(res.status_code(), UNSUCCESS_CODE);
+        #[test]
+        fn copy_data_until() {
+            let mut reader = Vec::new();
+            reader.extend(&RESPONSE[..]);
+
+            let mut reader = Cursor::new(reader);
+            let mut writer = Vec::new();
+
+            copy_until(&mut reader, &mut writer, &CR_LF_2).unwrap();
+            assert_eq!(writer, &RESPONSE_H[..]);
+        }
+
+        #[ignore]
+        #[test]
+        fn request_b_send() {
+            let mut writer = Vec::new();
+            let uri: Uri = URI.parse().unwrap();
+            let mut stream =
+                TcpStream::connect((uri.host().unwrap_or(""), uri.corr_port())).unwrap();
+
+            RequestBuilder::new(&URI.parse().unwrap())
+                .header("Connection", "Close")
+                .send(&mut stream, &mut writer)
+                .unwrap();
+        }
+
+        #[ignore]
+        #[test]
+        #[cfg(any(feature = "native-tls", feature = "rust-tls"))]
+        fn request_b_send_secure() {
+            let mut writer = Vec::new();
+            let uri: Uri = URI_S.parse().unwrap();
+
+            let stream = TcpStream::connect((uri.host().unwrap_or(""), uri.corr_port())).unwrap();
+            let mut secure_stream = tls::Config::default()
+                .connect(uri.host().unwrap_or(""), stream)
+                .unwrap();
+
+            RequestBuilder::new(&URI_S.parse().unwrap())
+                .header("Connection", "Close")
+                .send(&mut secure_stream, &mut writer)
+                .unwrap();
+        }
+
+        #[test]
+        fn request_connect_timeout() {
+            let uri = URI.parse().unwrap();
+            let mut request = Request::new(&uri);
+            request.connect_timeout(Some(Duration::from_nanos(1)));
+
+            assert_eq!(request.connect_timeout, Some(Duration::from_nanos(1)));
+
+            let err = request.send(&mut io::sink()).unwrap_err();
+            match err {
+                Error::IO(err) => assert_eq!(err.kind(), io::ErrorKind::TimedOut),
+                other => panic!("Expected error to be io::Error, got: {:?}", other),
+            };
+        }
+
+        #[ignore]
+        #[test]
+        fn request_read_timeout() {
+            let uri = URI.parse().unwrap();
+            let mut request = Request::new(&uri);
+            request.read_timeout(Some(Duration::from_nanos(1)));
+
+            assert_eq!(request.read_timeout, Some(Duration::from_nanos(1)));
+
+            let err = request.send(&mut io::sink()).unwrap_err();
+            match err {
+                Error::IO(err) => match err.kind() {
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => {}
+                    other => panic!(
+                        "Expected error kind to be one of WouldBlock/TimedOut, got: {:?}",
+                        other
+                    ),
+                },
+                other => panic!("Expected error to be io::Error, got: {:?}", other),
+            };
+        }
+
+        #[test]
+        fn request_send() {
+            let mut writer = Vec::new();
+            let uri = URI.parse().unwrap();
+            let res = Request::new(&uri).send(&mut writer).unwrap();
+
+            assert_ne!(res.status_code(), UNSUCCESS_CODE);
+        }
+
+        #[ignore]
+        #[test]
+        fn request_get() {
+            let mut writer = Vec::new();
+            let res = get(URI, &mut writer).unwrap();
+
+            assert_ne!(res.status_code(), UNSUCCESS_CODE);
+
+            let mut writer = Vec::with_capacity(200);
+            let res = get(URI_S, &mut writer).unwrap();
+
+            assert_ne!(res.status_code(), UNSUCCESS_CODE);
+        }
+
+        #[ignore]
+        #[test]
+        fn request_head() {
+            let res = head(URI).unwrap();
+            assert_ne!(res.status_code(), UNSUCCESS_CODE);
+
+            let res = head(URI_S).unwrap();
+            assert_ne!(res.status_code(), UNSUCCESS_CODE);
+        }
     }
 
-    #[ignore]
-    #[test]
-    fn request_get() {
-        let mut writer = Vec::new();
-        let res = get(URI, &mut writer).unwrap();
+    #[cfg(feature = "async")]
+    mod not_sync {
+        use super::*;
+        use async_std::io;
+        use async_std::io::Cursor;
 
-        assert_ne!(res.status_code(), UNSUCCESS_CODE);
+        #[async_std::test]
+        async fn copy_data_until() {
+            let mut reader = Vec::new();
+            reader.extend(&RESPONSE[..]);
 
-        let mut writer = Vec::with_capacity(200);
-        let res = get(URI_S, &mut writer).unwrap();
+            let mut reader = Cursor::new(reader);
+            let mut writer = Vec::new();
 
-        assert_ne!(res.status_code(), UNSUCCESS_CODE);
-    }
+            copy_until(&mut reader, &mut writer, &CR_LF_2)
+                .await
+                .unwrap();
+            assert_eq!(writer, &RESPONSE_H[..]);
+        }
 
-    #[ignore]
-    #[test]
-    fn request_head() {
-        let res = head(URI).unwrap();
-        assert_ne!(res.status_code(), UNSUCCESS_CODE);
+        #[ignore]
+        #[async_std::test]
+        async fn request_b_send() {
+            let mut writer = Vec::new();
+            let uri: Uri = URI.parse().unwrap();
+            let mut stream = TcpStream::connect((uri.host().unwrap_or(""), uri.corr_port()))
+                .await
+                .unwrap();
 
-        let res = head(URI_S).unwrap();
-        assert_ne!(res.status_code(), UNSUCCESS_CODE);
+            RequestBuilder::new(&URI.parse().unwrap())
+                .header("Connection", "Close")
+                .send(&mut stream, &mut writer)
+                .await
+                .unwrap();
+        }
+
+        #[ignore]
+        #[async_std::test]
+        async fn request_connect_timeout() {
+            let uri = URI.parse().unwrap();
+            let mut request = Request::new(&uri);
+            request.connect_timeout(Some(Duration::from_nanos(1)));
+
+            assert_eq!(request.connect_timeout, Some(Duration::from_nanos(1)));
+
+            let err = request.send(&mut io::sink()).await.unwrap_err();
+            match err {
+                Error::IO(err) => assert_eq!(err.kind(), io::ErrorKind::TimedOut),
+                other => panic!("Expected error to be io::Error, got: {:?}", other),
+            };
+        }
+
+        #[ignore]
+        #[async_std::test]
+        async fn request_read_timeout() {
+            let uri = URI.parse().unwrap();
+            let mut request = Request::new(&uri);
+            request.read_timeout(Some(Duration::from_nanos(1)));
+
+            assert_eq!(request.read_timeout, Some(Duration::from_nanos(1)));
+
+            let err = request.send(&mut io::sink()).await.unwrap_err();
+            match err {
+                Error::IO(err) => match err.kind() {
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut => {}
+                    other => panic!(
+                        "Expected error kind to be one of WouldBlock/TimedOut, got: {:?}",
+                        other
+                    ),
+                },
+                other => panic!("Expected error to be io::Error, got: {:?}", other),
+            };
+        }
+
+        #[async_std::test]
+        async fn request_send() {
+            let mut writer = Vec::new();
+            let uri = URI.parse().unwrap();
+            let res = Request::new(&uri).send(&mut writer).await.unwrap();
+
+            assert_ne!(res.status_code(), UNSUCCESS_CODE);
+        }
+
+        #[ignore]
+        #[async_std::test]
+        async fn request_get() {
+            let mut writer = Vec::new();
+            let res = get(URI, &mut writer).await.unwrap();
+
+            assert_ne!(res.status_code(), UNSUCCESS_CODE);
+
+            let mut writer = Vec::with_capacity(200);
+            let res = get(URI_S, &mut writer).await.unwrap();
+
+            assert_ne!(res.status_code(), UNSUCCESS_CODE);
+        }
+
+        #[ignore]
+        #[async_std::test]
+        async fn request_head() {
+            let res = head(URI).await.unwrap();
+            assert_ne!(res.status_code(), UNSUCCESS_CODE);
+
+            let res = head(URI_S).await.unwrap();
+            assert_ne!(res.status_code(), UNSUCCESS_CODE);
+        }
     }
 }

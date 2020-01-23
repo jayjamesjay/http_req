@@ -16,5 +16,9 @@
 pub mod error;
 pub mod request;
 pub mod response;
+#[cfg(not(feature = "async"))]
 pub mod tls;
 pub mod uri;
+
+#[cfg(feature = "async")]
+pub use async_std;
