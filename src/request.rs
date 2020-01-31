@@ -7,17 +7,59 @@ use crate::{
 };
 use std::{
     fmt,
-    io::{self, Read, Write},
+    io::{self, ErrorKind, Read, Write},
     net::{TcpStream, ToSocketAddrs},
     path::Path,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const CR_LF: &str = "\r\n";
+const BUF_SIZE: usize = 8 * 1024;
+const TEST_FREQ: usize = 200;
+const CONNECTION_TIMEOUT: u64 = 3 * 3600;
+
+///Copies data from `reader` to `writer` until the `timeout` is reached.
+///Returns how many bytes has been read.
+pub fn copy_with_timeout<R, W>(reader: &mut R, writer: &mut W, timeout: Instant) -> io::Result<u64>
+where
+    R: Read + ?Sized,
+    W: Write + ?Sized,
+{
+    let mut buf = [0; BUF_SIZE];
+    let mut copied = 0;
+    let mut counter = 0;
+
+    loop {
+        let len = match reader.read(&mut buf) {
+            Ok(0) => return Ok(copied),
+            Ok(len) => len,
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        };
+        writer.write_all(&buf[..len])?;
+        copied += len as u64;
+
+        if counter == TEST_FREQ {
+            counter = 0;
+            let now = Instant::now();
+
+            if now >= timeout {
+                return Ok(copied);
+            }
+        } else {
+            counter += 1;
+        }
+    }
+}
 
 ///Copies data from `reader` to `writer` until the specified `val`ue is reached.
 ///Returns how many bytes has been read.
-pub fn copy_until<R, W>(reader: &mut R, writer: &mut W, val: &[u8]) -> Result<usize, io::Error>
+pub fn copy_until<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    val: &[u8],
+    timeout: Instant,
+) -> Result<usize, io::Error>
 where
     R: Read + ?Sized,
     W: Write + ?Sized,
@@ -31,8 +73,9 @@ where
     for byte in reader.bytes() {
         buf.push(byte?);
         read += 1;
+        let now = Instant::now();
 
-        if buf.ends_with(val) {
+        if buf.ends_with(val) || now >= timeout {
             break;
         }
     }
@@ -129,6 +172,7 @@ pub struct RequestBuilder<'a> {
     version: HttpVersion,
     headers: Headers,
     body: Option<&'a [u8]>,
+    timeout: Instant,
 }
 
 impl<'a> RequestBuilder<'a> {
@@ -159,6 +203,7 @@ impl<'a> RequestBuilder<'a> {
             method: Method::GET,
             version: HttpVersion::Http11,
             body: None,
+            timeout: Instant::now() + Duration::from_secs(CONNECTION_TIMEOUT),
         }
     }
 
@@ -311,6 +356,37 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
+    ///Sets connection timeout.
+    ///Default timeout is set to 3 hours.
+    ///
+    ///# Examples
+    ///```
+    ///use std::{net::TcpStream, time::{Duration, Instant}};
+    ///use http_req::{request::RequestBuilder, tls, uri::Uri};
+    ///
+    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let mut writer = Vec::new();
+    ///
+    ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+    ///let mut stream = tls::Config::default()
+    ///    .connect(addr.host().unwrap_or(""), stream)
+    ///    .unwrap();
+    ///let timeout = Instant::now() + Duration::from_secs(3600);
+    ///
+    ///let response = RequestBuilder::new(&addr)
+    ///    .timeout(timeout)
+    ///    .header("Connection", "Close")
+    ///    .send(&mut stream, &mut writer)
+    ///    .unwrap();
+    ///```
+    pub fn timeout<T>(&mut self, timeout: T) -> &mut Self
+    where
+        Instant: From<T>,
+    {
+        self.timeout = Instant::from(timeout);
+        self
+    }
+
     ///Sends HTTP request in these steps:
     ///
     ///- Writes request message to `stream`.
@@ -362,7 +438,7 @@ impl<'a> RequestBuilder<'a> {
         let res = self.read_head(stream)?;
 
         if self.method != Method::HEAD {
-            io::copy(stream, writer)?;
+            copy_with_timeout(stream, writer, self.timeout)?;
         }
 
         Ok(res)
@@ -383,7 +459,7 @@ impl<'a> RequestBuilder<'a> {
     ///Reads head of server's response
     pub fn read_head<T: Read>(&self, stream: &mut T) -> Result<Response, error::Error> {
         let mut head = Vec::with_capacity(200);
-        copy_until(stream, &mut head, &CR_LF_2)?;
+        copy_until(stream, &mut head, &CR_LF_2, self.timeout)?;
 
         Response::from_head(&head)
     }
@@ -584,6 +660,32 @@ impl<'a> Request<'a> {
     ///```
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
         self.inner.body(body);
+        self
+    }
+    
+    ///Sets connection timeout of request.
+    ///By default timeout is set to 3 hours.
+    ///
+    ///# Examples
+    ///```
+    ///use std::time::{Duration, Instant};
+    ///use http_req::{request::Request, uri::Uri};
+    ///
+    ///let mut writer = Vec::new();
+    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///const body: &[u8; 27] = b"field1=value1&field2=value2";
+    ///let timeout = Instant::now() + Duration::from_secs(3600);
+    ///
+    ///let response = Request::new(&uri)
+    ///    .timeout(timeout)
+    ///    .send(&mut writer)
+    ///    .unwrap();
+    ///```
+    pub fn timeout<T>(&mut self, timeout: T) -> &mut Self
+    where
+        Instant: From<T>,
+    {
+        self.inner.timeout = Instant::from(timeout);
         self
     }
 
@@ -817,7 +919,13 @@ mod tests {
         let mut reader = Cursor::new(reader);
         let mut writer = Vec::new();
 
-        copy_until(&mut reader, &mut writer, &CR_LF_2).unwrap();
+        copy_until(
+            &mut reader,
+            &mut writer,
+            &CR_LF_2,
+            Instant::now() + Duration::from_secs(CONNECTION_TIMEOUT),
+        )
+        .unwrap();
         assert_eq!(writer, &RESPONSE_H[..]);
     }
 
@@ -881,6 +989,16 @@ mod tests {
         let req = req.body(&BODY);
 
         assert_eq!(req.body, Some(BODY.as_ref()));
+    }
+
+    #[test]
+    fn request_b_timeout() {
+        let uri = URI.parse().unwrap();
+        let mut req = RequestBuilder::new(&uri);
+        let timeout = Instant::now() + Duration::from_secs(360);
+
+        req.timeout(timeout);
+        assert_eq!(req.timeout, timeout);
     }
 
     #[ignore]
@@ -988,6 +1106,16 @@ mod tests {
         let req = req.body(&BODY);
 
         assert_eq!(req.inner.body, Some(BODY.as_ref()));
+    }
+
+    #[test]
+    fn request_timeout() {
+        let uri = URI.parse().unwrap();
+        let mut request = Request::new(&uri);
+        let timeout = Instant::now() + Duration::from_secs(360);
+
+        request.timeout(timeout);
+        assert_eq!(request.inner.timeout, timeout);
     }
 
     #[test]
