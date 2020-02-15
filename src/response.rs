@@ -595,13 +595,17 @@ pub fn find_slice<T>(data: &[T], e: &[T]) -> Option<usize>
 where
     [T]: PartialEq,
 {
-    for i in 0..=data.len() - e.len() {
-        if data[i..(i + e.len())] == *e {
-            return Some(i + e.len());
+    if data.len() > e.len() {
+        for i in 0..=data.len() - e.len() {
+            if data[i..(i + e.len())] == *e {
+                return Some(i + e.len());
+            }
         }
-    }
 
-    None
+        None
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

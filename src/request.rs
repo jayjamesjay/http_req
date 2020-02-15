@@ -1,7 +1,7 @@
 //! creating and sending HTTP requests
 use crate::{
     error,
-    response::{Headers, Response, CR_LF_2},
+    response::{find_slice, Headers, Response, CR_LF_2},
     tls,
     uri::Uri,
 };
@@ -15,6 +15,7 @@ use std::{
 
 const CR_LF: &str = "\r\n";
 const BUF_SIZE: usize = 8 * 1024;
+const SMALL_BUF_SIZE: usize = 8 * 10;
 const TEST_FREQ: usize = 200;
 const CONNECTION_TIMEOUT: u64 = 3 * 3600;
 
@@ -52,38 +53,50 @@ where
     }
 }
 
-///Copies data from `reader` to `writer` until the specified `val`ue is reached.
-///Returns how many bytes has been read.
-pub fn copy_until<R, W>(
+///Reads data from `reader` and checks for specified `val`ue. When data contains specified value, 
+///stops reading. Returns read data as array of two vectors: elements before and after the `val`.
+pub fn copy_until<R>(
     reader: &mut R,
-    writer: &mut W,
     val: &[u8],
     timeout: Instant,
-) -> Result<usize, io::Error>
+) -> Result<[Vec<u8>; 2], io::Error>
 where
     R: Read + ?Sized,
-    W: Write + ?Sized,
 {
-    let mut buf = Vec::with_capacity(200);
+    let mut buf = [0; SMALL_BUF_SIZE];
+    let mut writer = Vec::new();
+    let mut counter = 0;
+    let mut split_idx = 0;
 
-    let mut pre_buf = [0; 10];
-    let mut read = reader.read(&mut pre_buf)?;
-    buf.extend(&pre_buf[..read]);
+    loop {
+        let len = match reader.read(&mut buf) {
+            Ok(0) => break,
+            Ok(len) => len,
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        };
 
-    for byte in reader.bytes() {
-        buf.push(byte?);
-        read += 1;
-        let now = Instant::now();
+        writer.write_all(&buf[..len])?;
 
-        if buf.ends_with(val) || now >= timeout {
+        if let Some(i) = find_slice(&writer, val) {
+            split_idx = i;
             break;
+        }
+
+        if counter == TEST_FREQ {
+            counter = 0;
+            let now = Instant::now();
+
+            if now >= timeout {
+                split_idx = writer.len();
+                break;
+            }
+        } else {
+            counter += 1;
         }
     }
 
-    writer.write_all(&buf)?;
-    writer.flush()?;
-
-    Ok(read)
+    Ok([writer[..split_idx].to_vec(), writer[split_idx..].to_vec()])
 }
 
 ///HTTP request methods
@@ -356,8 +369,8 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
-    ///Sets connection timeout.
-    ///Default timeout is set to 3 hours.
+    ///Sets timeout for entire connection.
+    ///Default timeout is 3 hours.
     ///
     ///# Examples
     ///```
@@ -435,9 +448,10 @@ impl<'a> RequestBuilder<'a> {
         U: Write,
     {
         self.write_msg(stream, &self.parse_msg())?;
-        let res = self.read_head(stream)?;
+        let (res, body_part) = self.read_head(stream)?;
 
         if self.method != Method::HEAD {
+            writer.write_all(&body_part)?;
             copy_with_timeout(stream, writer, self.timeout)?;
         }
 
@@ -457,11 +471,10 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Reads head of server's response
-    pub fn read_head<T: Read>(&self, stream: &mut T) -> Result<Response, error::Error> {
-        let mut head = Vec::with_capacity(200);
-        copy_until(stream, &mut head, &CR_LF_2, self.timeout)?;
+    pub fn read_head<T: Read>(&self, stream: &mut T) -> Result<(Response, Vec<u8>), error::Error> {
+        let [head, body_part] = copy_until(stream, &CR_LF_2, self.timeout)?;
 
-        Response::from_head(&head)
+        Ok((Response::from_head(&head)?, body_part))
     }
 
     ///Parses request message for this `RequestBuilder`
@@ -662,7 +675,7 @@ impl<'a> Request<'a> {
         self.inner.body(body);
         self
     }
-    
+
     ///Sets connection timeout of request.
     ///By default timeout is set to 3 hours.
     ///
@@ -917,16 +930,14 @@ mod tests {
         reader.extend(&RESPONSE[..]);
 
         let mut reader = Cursor::new(reader);
-        let mut writer = Vec::new();
 
-        copy_until(
+        let [head, _body] = copy_until(
             &mut reader,
-            &mut writer,
             &CR_LF_2,
             Instant::now() + Duration::from_secs(CONNECTION_TIMEOUT),
         )
         .unwrap();
-        assert_eq!(writer, &RESPONSE_H[..]);
+        assert_eq!(&head[..], &RESPONSE_H[..]);
     }
 
     #[test]
