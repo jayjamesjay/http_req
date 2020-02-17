@@ -17,11 +17,10 @@ const CR_LF: &str = "\r\n";
 const BUF_SIZE: usize = 8 * 1024;
 const SMALL_BUF_SIZE: usize = 8 * 10;
 const TEST_FREQ: usize = 200;
-const CONNECTION_TIMEOUT: u64 = 3 * 3600;
 
-///Copies data from `reader` to `writer` until the `timeout` is reached.
+///Copies data from `reader` to `writer` until the `deadline` is reached.
 ///Returns how many bytes has been read.
-pub fn copy_with_timeout<R, W>(reader: &mut R, writer: &mut W, timeout: Instant) -> io::Result<u64>
+pub fn copy_with_timeout<R, W>(reader: &mut R, writer: &mut W, deadline: Instant) -> io::Result<u64>
 where
     R: Read + ?Sized,
     W: Write + ?Sized,
@@ -44,7 +43,7 @@ where
             counter = 0;
             let now = Instant::now();
 
-            if now >= timeout {
+            if now >= deadline {
                 return Ok(copied);
             }
         } else {
@@ -53,12 +52,13 @@ where
     }
 }
 
-///Reads data from `reader` and checks for specified `val`ue. When data contains specified value, 
-///stops reading. Returns read data as array of two vectors: elements before and after the `val`.
+///Reads data from `reader` and checks for specified `val`ue. When data contains specified value
+///or `deadline` is reached, stops reading. Returns read data as array of two vectors: elements
+///before and after the `val`.
 pub fn copy_until<R>(
     reader: &mut R,
     val: &[u8],
-    timeout: Instant,
+    deadline: Instant,
 ) -> Result<[Vec<u8>; 2], io::Error>
 where
     R: Read + ?Sized,
@@ -87,7 +87,7 @@ where
             counter = 0;
             let now = Instant::now();
 
-            if now >= timeout {
+            if now >= deadline {
                 split_idx = writer.len();
                 break;
             }
@@ -185,7 +185,7 @@ pub struct RequestBuilder<'a> {
     version: HttpVersion,
     headers: Headers,
     body: Option<&'a [u8]>,
-    timeout: Instant,
+    timeout: Option<Duration>,
 }
 
 impl<'a> RequestBuilder<'a> {
@@ -216,7 +216,7 @@ impl<'a> RequestBuilder<'a> {
             method: Method::GET,
             version: HttpVersion::Http11,
             body: None,
-            timeout: Instant::now() + Duration::from_secs(CONNECTION_TIMEOUT),
+            timeout: None,
         }
     }
 
@@ -370,7 +370,6 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Sets timeout for entire connection.
-    ///Default timeout is 3 hours.
     ///
     ///# Examples
     ///```
@@ -384,7 +383,7 @@ impl<'a> RequestBuilder<'a> {
     ///let mut stream = tls::Config::default()
     ///    .connect(addr.host().unwrap_or(""), stream)
     ///    .unwrap();
-    ///let timeout = Instant::now() + Duration::from_secs(3600);
+    ///let timeout = Duration::from_secs(3600);
     ///
     ///let response = RequestBuilder::new(&addr)
     ///    .timeout(timeout)
@@ -394,9 +393,9 @@ impl<'a> RequestBuilder<'a> {
     ///```
     pub fn timeout<T>(&mut self, timeout: T) -> &mut Self
     where
-        Instant: From<T>,
+        Duration: From<T>,
     {
-        self.timeout = Instant::from(timeout);
+        self.timeout = Some(Duration::from(timeout));
         self
     }
 
@@ -448,11 +447,17 @@ impl<'a> RequestBuilder<'a> {
         U: Write,
     {
         self.write_msg(stream, &self.parse_msg())?;
-        let (res, body_part) = self.read_head(stream)?;
+        let (res, body_part) = self.read_head(stream, Instant::now() + Duration::from_secs(360))?;
 
         if self.method != Method::HEAD {
             writer.write_all(&body_part)?;
-            copy_with_timeout(stream, writer, self.timeout)?;
+
+            if let Some(timeout) = self.timeout {
+                let deadline = Instant::now() + timeout;
+                copy_with_timeout(stream, writer, deadline)?;
+            } else {
+                io::copy(stream, writer)?;
+            }
         }
 
         Ok(res)
@@ -471,8 +476,12 @@ impl<'a> RequestBuilder<'a> {
     }
 
     ///Reads head of server's response
-    pub fn read_head<T: Read>(&self, stream: &mut T) -> Result<(Response, Vec<u8>), error::Error> {
-        let [head, body_part] = copy_until(stream, &CR_LF_2, self.timeout)?;
+    pub fn read_head<T: Read>(
+        &self,
+        stream: &mut T,
+        deadline: Instant,
+    ) -> Result<(Response, Vec<u8>), error::Error> {
+        let [head, body_part] = copy_until(stream, &CR_LF_2, deadline)?;
 
         Ok((Response::from_head(&head)?, body_part))
     }
@@ -687,7 +696,7 @@ impl<'a> Request<'a> {
     ///let mut writer = Vec::new();
     ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
     ///const body: &[u8; 27] = b"field1=value1&field2=value2";
-    ///let timeout = Instant::now() + Duration::from_secs(3600);
+    ///let timeout = Duration::from_secs(3600);
     ///
     ///let response = Request::new(&uri)
     ///    .timeout(timeout)
@@ -696,9 +705,9 @@ impl<'a> Request<'a> {
     ///```
     pub fn timeout<T>(&mut self, timeout: T) -> &mut Self
     where
-        Instant: From<T>,
+        Duration: From<T>,
     {
-        self.inner.timeout = Instant::from(timeout);
+        self.inner.timeout = Some(Duration::from(timeout));
         self
     }
 
@@ -934,7 +943,7 @@ mod tests {
         let [head, _body] = copy_until(
             &mut reader,
             &CR_LF_2,
-            Instant::now() + Duration::from_secs(CONNECTION_TIMEOUT),
+            Instant::now() + Duration::from_secs(360),
         )
         .unwrap();
         assert_eq!(&head[..], &RESPONSE_H[..]);
@@ -1006,10 +1015,10 @@ mod tests {
     fn request_b_timeout() {
         let uri = URI.parse().unwrap();
         let mut req = RequestBuilder::new(&uri);
-        let timeout = Instant::now() + Duration::from_secs(360);
+        let timeout = Duration::from_secs(360);
 
         req.timeout(timeout);
-        assert_eq!(req.timeout, timeout);
+        assert_eq!(req.timeout, Some(timeout));
     }
 
     #[ignore]
@@ -1123,10 +1132,10 @@ mod tests {
     fn request_timeout() {
         let uri = URI.parse().unwrap();
         let mut request = Request::new(&uri);
-        let timeout = Instant::now() + Duration::from_secs(360);
+        let timeout = Duration::from_secs(360);
 
         request.timeout(timeout);
-        assert_eq!(request.inner.timeout, timeout);
+        assert_eq!(request.inner.timeout, Some(timeout));
     }
 
     #[test]
