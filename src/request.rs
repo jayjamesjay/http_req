@@ -16,7 +16,36 @@ use std::{
 const CR_LF: &str = "\r\n";
 const BUF_SIZE: usize = 8 * 1024;
 const SMALL_BUF_SIZE: usize = 8 * 10;
-const TEST_FREQ: usize = 200;
+const TEST_FREQ: usize = 100;
+
+///Every iteration increases `count` by one. When `count` is equal to `stop`, `next()`
+///returns `Some(true)` (and sets `count` to 0), otherwise returns `Some(false)`.
+///Iterator never returns `None`.
+pub struct Counter {
+    count: usize,
+    stop: usize,
+}
+
+impl Counter {
+    pub fn new(stop: usize) -> Counter {
+        Counter { count: 0, stop }
+    }
+}
+
+impl Iterator for Counter {
+    type Item = bool;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.count += 1;
+        let breakpoint = self.count == self.stop;
+
+        if breakpoint {
+            self.count = 0;
+        }
+
+        Some(breakpoint)
+    }
+}
 
 ///Copies data from `reader` to `writer` until the `deadline` is reached.
 ///Returns how many bytes has been read.
@@ -27,7 +56,7 @@ where
 {
     let mut buf = [0; BUF_SIZE];
     let mut copied = 0;
-    let mut counter = 0;
+    let mut counter = Counter::new(TEST_FREQ);
 
     loop {
         let len = match reader.read(&mut buf) {
@@ -39,15 +68,8 @@ where
         writer.write_all(&buf[..len])?;
         copied += len as u64;
 
-        if counter == TEST_FREQ {
-            counter = 0;
-            let now = Instant::now();
-
-            if now >= deadline {
-                return Ok(copied);
-            }
-        } else {
-            counter += 1;
+        if counter.next().unwrap() && Instant::now() >= deadline {
+            return Ok(copied);
         }
     }
 }
@@ -65,7 +87,7 @@ where
 {
     let mut buf = [0; SMALL_BUF_SIZE];
     let mut writer = Vec::new();
-    let mut counter = 0;
+    let mut counter = Counter::new(TEST_FREQ);
     let mut split_idx = 0;
 
     loop {
@@ -83,16 +105,9 @@ where
             break;
         }
 
-        if counter == TEST_FREQ {
-            counter = 0;
-            let now = Instant::now();
-
-            if now >= deadline {
-                split_idx = writer.len();
-                break;
-            }
-        } else {
-            counter += 1;
+        if counter.next().unwrap() && Instant::now() >= deadline {
+            split_idx = writer.len();
+            break;
         }
     }
 
@@ -395,7 +410,7 @@ impl<'a> RequestBuilder<'a> {
     where
         Duration: From<T>,
     {
-        self.timeout = timeout.map(|t| Duration::from(t));
+        self.timeout = timeout.map(Duration::from);
         self
     }
 
@@ -707,7 +722,7 @@ impl<'a> Request<'a> {
     where
         Duration: From<T>,
     {
-        self.inner.timeout = timeout.map(|t| Duration::from(t));
+        self.inner.timeout = timeout.map(Duration::from);
         self
     }
 
@@ -932,6 +947,27 @@ mod tests {
                                            Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
                                            Content-Type: text/html\r\n\
                                            Content-Length: 100\r\n\r\n";
+
+    #[test]
+    fn counter_new() {
+        let counter = Counter::new(200);
+
+        assert_eq!(counter.count, 0);
+        assert_eq!(counter.stop, 200);
+    }
+
+    #[test]
+    fn counter_next() {
+        let mut counter = Counter::new(5);
+
+        assert_eq!(counter.next(), Some(false));
+        assert_eq!(counter.next(), Some(false));
+        assert_eq!(counter.next(), Some(false));
+        assert_eq!(counter.next(), Some(false));
+        assert_eq!(counter.next(), Some(true));
+        assert_eq!(counter.next(), Some(false));
+        assert_eq!(counter.next(), Some(false));
+    }
 
     #[test]
     fn copy_data_until() {
