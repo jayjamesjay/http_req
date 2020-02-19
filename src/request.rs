@@ -383,7 +383,7 @@ impl<'a> RequestBuilder<'a> {
     ///let mut stream = tls::Config::default()
     ///    .connect(addr.host().unwrap_or(""), stream)
     ///    .unwrap();
-    ///let timeout = Duration::from_secs(3600);
+    ///let timeout = Some(Duration::from_secs(3600));
     ///
     ///let response = RequestBuilder::new(&addr)
     ///    .timeout(timeout)
@@ -391,11 +391,11 @@ impl<'a> RequestBuilder<'a> {
     ///    .send(&mut stream, &mut writer)
     ///    .unwrap();
     ///```
-    pub fn timeout<T>(&mut self, timeout: T) -> &mut Self
+    pub fn timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
     where
         Duration: From<T>,
     {
-        self.timeout = Some(Duration::from(timeout));
+        self.timeout = timeout.map(|t| Duration::from(t));
         self
     }
 
@@ -696,18 +696,18 @@ impl<'a> Request<'a> {
     ///let mut writer = Vec::new();
     ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
     ///const body: &[u8; 27] = b"field1=value1&field2=value2";
-    ///let timeout = Duration::from_secs(3600);
+    ///let timeout = Some(Duration::from_secs(3600));
     ///
     ///let response = Request::new(&uri)
     ///    .timeout(timeout)
     ///    .send(&mut writer)
     ///    .unwrap();
     ///```
-    pub fn timeout<T>(&mut self, timeout: T) -> &mut Self
+    pub fn timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
     where
         Duration: From<T>,
     {
-        self.inner.timeout = Some(Duration::from(timeout));
+        self.inner.timeout = timeout.map(|t| Duration::from(t));
         self
     }
 
@@ -1015,10 +1015,10 @@ mod tests {
     fn request_b_timeout() {
         let uri = URI.parse().unwrap();
         let mut req = RequestBuilder::new(&uri);
-        let timeout = Duration::from_secs(360);
+        let timeout = Some(Duration::from_secs(360));
 
         req.timeout(timeout);
-        assert_eq!(req.timeout, Some(timeout));
+        assert_eq!(req.timeout, timeout);
     }
 
     #[ignore]
@@ -1132,10 +1132,10 @@ mod tests {
     fn request_timeout() {
         let uri = URI.parse().unwrap();
         let mut request = Request::new(&uri);
-        let timeout = Duration::from_secs(360);
+        let timeout = Some(Duration::from_secs(360));
 
         request.timeout(timeout);
-        assert_eq!(request.inner.timeout, Some(timeout));
+        assert_eq!(request.inner.timeout, timeout);
     }
 
     #[test]
