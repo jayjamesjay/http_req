@@ -154,10 +154,12 @@ pub enum HttpVersion {
 
 impl HttpVersion {
     pub fn as_str(self) -> &'static str {
+        use self::HttpVersion::*;
+
         match self {
-            HttpVersion::Http10 => "HTTP/1.0",
-            HttpVersion::Http11 => "HTTP/1.1",
-            HttpVersion::Http20 => "HTTP/2.0",
+            Http10 => "HTTP/1.0",
+            Http11 => "HTTP/1.1",
+            Http20 => "HTTP/2.0",
         }
     }
 }
