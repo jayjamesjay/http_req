@@ -462,7 +462,12 @@ impl<'a> RequestBuilder<'a> {
         U: Write,
     {
         self.write_msg(stream, &self.parse_msg())?;
-        let (res, body_part) = self.read_head(stream, Instant::now() + Duration::from_secs(360))?;
+
+        let head_deadline = match self.timeout {
+            Some(t) => Instant::now() + t,
+            None => Instant::now() + Duration::from_secs(360),
+        };
+        let (res, body_part) = self.read_head(stream, head_deadline)?;
 
         if self.method != Method::HEAD {
             writer.write_all(&body_part)?;
