@@ -64,10 +64,10 @@ impl Response {
         if res.is_empty() {
             Err(Error::Parse(ParseErr::Empty))
         } else {
-            let mut pos = res.len();
-            if let Some(v) = find_slice(res, &CR_LF_2) {
-                pos = v;
-            }
+            let pos = match find_slice(res, &CR_LF_2) {
+                Some(v) => v,
+                None => res.len(),
+            };
 
             let response = Self::from_head(&res[..pos])?;
             writer.write_all(&res[pos..])?;
@@ -156,8 +156,8 @@ impl Response {
         &self.headers
     }
 
-    ///Returns length of the content of this `Response` as a `Result`, according to information
-    ///included in headers. If there is no such an information, returns `Ok(0)`.
+    ///Returns length of the content of this `Response` as a `Option`, according to information
+    ///included in headers. If there is no such an information, returns `None`.
     ///
     ///# Examples
     ///```
@@ -173,11 +173,10 @@ impl Response {
     ///let response = Response::try_from(RESPONSE, &mut body).unwrap();
     ///assert_eq!(response.content_len().unwrap(), 100);
     ///```
-    pub fn content_len(&self) -> Result<usize, ParseErr> {
-        match self.headers().get("Content-Length") {
-            Some(p) => Ok(p.parse()?),
-            None => Ok(0),
-        }
+    pub fn content_len(&self) -> Option<usize> {
+        self.headers()
+            .get("Content-Length")
+            .and_then(|len| len.parse().ok())
     }
 }
 
@@ -212,9 +211,10 @@ impl str::FromStr for Status {
 
         let version = status_line.next().ok_or(ParseErr::StatusErr)?;
         let code: StatusCode = status_line.next().ok_or(ParseErr::StatusErr)?.parse()?;
-        let reason = status_line
-            .next()
-            .unwrap_or_else(|| code.reason().unwrap_or("Unknown"));
+        let reason = match status_line.next() {
+            Some(reason) => reason,
+            None => code.reason().unwrap_or("Unknown"),
+        };
 
         Ok(Status::from((version, code, reason)))
     }
@@ -498,68 +498,74 @@ impl StatusCode {
     ///assert_eq!(code.reason(), Some("OK"))
     ///```
     pub fn reason(self) -> Option<&'static str> {
-        match self.0 {
-            100 => Some("Continue"),
-            101 => Some("Switching Protocols"),
-            102 => Some("Processing"),
-            200 => Some("OK"),
-            201 => Some("Created"),
-            202 => Some("Accepted"),
-            203 => Some("Non Authoritative Information"),
-            204 => Some("No Content"),
-            205 => Some("Reset Content"),
-            206 => Some("Partial Content"),
-            207 => Some("Multi-Status"),
-            208 => Some("Already Reported"),
-            226 => Some("IM Used"),
-            300 => Some("Multiple Choices"),
-            301 => Some("Moved Permanently"),
-            302 => Some("Found"),
-            303 => Some("See Other"),
-            304 => Some("Not Modified"),
-            305 => Some("Use Proxy"),
-            307 => Some("Temporary Redirect"),
-            308 => Some("Permanent Redirect"),
-            400 => Some("Bad Request"),
-            401 => Some("Unauthorized"),
-            402 => Some("Payment Required"),
-            403 => Some("Forbidden"),
-            404 => Some("Not Found"),
-            405 => Some("Method Not Allowed"),
-            406 => Some("Not Acceptable"),
-            407 => Some("Proxy Authentication Required"),
-            408 => Some("Request Timeout"),
-            409 => Some("Conflict"),
-            410 => Some("Gone"),
-            411 => Some("Length Required"),
-            412 => Some("Precondition Failed"),
-            413 => Some("Payload Too Large"),
-            414 => Some("URI Too Long"),
-            415 => Some("Unsupported Media Type"),
-            416 => Some("Range Not Satisfiable"),
-            417 => Some("Expectation Failed"),
-            418 => Some("I'm a teapot"),
-            421 => Some("Misdirected Request"),
-            422 => Some("Unprocessable Entity"),
-            423 => Some("Locked"),
-            424 => Some("Failed Dependency"),
-            426 => Some("Upgrade Required"),
-            428 => Some("Precondition Required"),
-            429 => Some("Too Many Requests"),
-            431 => Some("Request Header Fields Too Large"),
-            451 => Some("Unavailable For Legal Reasons"),
-            500 => Some("Internal Server Error"),
-            501 => Some("Not Implemented"),
-            502 => Some("Bad Gateway"),
-            503 => Some("Service Unavailable"),
-            504 => Some("Gateway Timeout"),
-            505 => Some("HTTP Version Not Supported"),
-            506 => Some("Variant Also Negotiates"),
-            507 => Some("Insufficient Storage"),
-            508 => Some("Loop Detected"),
-            510 => Some("Not Extended"),
-            511 => Some("Network Authentication Required"),
-            _ => None,
+        let reason = match self.0 {
+            100 => "Continue",
+            101 => "Switching Protocols",
+            102 => "Processing",
+            200 => "OK",
+            201 => "Created",
+            202 => "Accepted",
+            203 => "Non Authoritative Information",
+            204 => "No Content",
+            205 => "Reset Content",
+            206 => "Partial Content",
+            207 => "Multi-Status",
+            208 => "Already Reported",
+            226 => "IM Used",
+            300 => "Multiple Choices",
+            301 => "Moved Permanently",
+            302 => "Found",
+            303 => "See Other",
+            304 => "Not Modified",
+            305 => "Use Proxy",
+            307 => "Temporary Redirect",
+            308 => "Permanent Redirect",
+            400 => "Bad Request",
+            401 => "Unauthorized",
+            402 => "Payment Required",
+            403 => "Forbidden",
+            404 => "Not Found",
+            405 => "Method Not Allowed",
+            406 => "Not Acceptable",
+            407 => "Proxy Authentication Required",
+            408 => "Request Timeout",
+            409 => "Conflict",
+            410 => "Gone",
+            411 => "Length Required",
+            412 => "Precondition Failed",
+            413 => "Payload Too Large",
+            414 => "URI Too Long",
+            415 => "Unsupported Media Type",
+            416 => "Range Not Satisfiable",
+            417 => "Expectation Failed",
+            418 => "I'm a teapot",
+            421 => "Misdirected Request",
+            422 => "Unprocessable Entity",
+            423 => "Locked",
+            424 => "Failed Dependency",
+            426 => "Upgrade Required",
+            428 => "Precondition Required",
+            429 => "Too Many Requests",
+            431 => "Request Header Fields Too Large",
+            451 => "Unavailable For Legal Reasons",
+            500 => "Internal Server Error",
+            501 => "Not Implemented",
+            502 => "Bad Gateway",
+            503 => "Service Unavailable",
+            504 => "Gateway Timeout",
+            505 => "HTTP Version Not Supported",
+            506 => "Variant Also Negotiates",
+            507 => "Insufficient Storage",
+            508 => "Loop Detected",
+            510 => "Not Extended",
+            511 => "Network Authentication Required",
+            _ => "",
+        };
+
+        if !reason.is_empty() {
+            Some(reason)
+        } else {
+            None
         }
     }
 }
@@ -595,9 +601,11 @@ pub fn find_slice<T>(data: &[T], e: &[T]) -> Option<usize>
 where
     [T]: PartialEq,
 {
-    for i in 0..=data.len() - e.len() {
-        if data[i..(i + e.len())] == *e {
-            return Some(i + e.len());
+    if data.len() > e.len() {
+        for i in 0..=data.len() - e.len() {
+            if data[i..(i + e.len())] == *e {
+                return Some(i + e.len());
+            }
         }
     }
 
@@ -862,8 +870,20 @@ mod tests {
     fn find_slice_e() {
         const WORDS: [&str; 8] = ["Good", "job", "Great", "work", "Have", "fun", "See", "you"];
         const SEARCH: [&str; 3] = ["Great", "work", "Have"];
+        const TOO_LONG_SEARCH: [&str; 9] = [
+            "Good",
+            "job",
+            "Great",
+            "fascinating",
+            "work",
+            "Have",
+            "fun",
+            "See",
+            "you",
+        ];
 
         assert_eq!(find_slice(&WORDS, &SEARCH), Some(5));
+        assert_eq!(find_slice(&WORDS, &TOO_LONG_SEARCH), None);
     }
 
     #[test]
@@ -928,14 +948,22 @@ mod tests {
         let mut writer = Vec::with_capacity(101);
         let res = Response::try_from(RESPONSE, &mut writer).unwrap();
 
-        assert_eq!(res.content_len(), Ok(100));
+        assert_eq!(res.content_len(), Some(100));
     }
 
     #[test]
     fn res_body() {
-        let mut writer = Vec::new();
-        Response::try_from(RESPONSE, &mut writer).unwrap();
+        {
+            let mut writer = Vec::new();
+            Response::try_from(RESPONSE, &mut writer).unwrap();
 
-        assert_eq!(writer, BODY);
+            assert_eq!(writer, BODY);
+        }
+        {
+            let mut writer = Vec::new();
+            Response::try_from(RESPONSE_H, &mut writer).unwrap();
+
+            assert_eq!(writer, &[]);
+        }
     }
 }

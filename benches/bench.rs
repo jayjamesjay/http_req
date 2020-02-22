@@ -2,8 +2,8 @@
 extern crate http_req;
 extern crate test;
 
-use http_req::{request::RequestBuilder, response::Response, uri::Uri};
-use std::{fs::File, io::Read};
+use http_req::{request::Request, response::Response, uri::Uri};
+use std::{fs::File, io::Read, time::Duration};
 use test::Bencher;
 
 #[bench]
@@ -18,17 +18,21 @@ fn parse_response(b: &mut Bencher) {
     });
 }
 
-const URI: &str = "https://doc.rust-lang.org/stable/std/string/struct.String.html";
+const URI: &str = "https://doc.rust-lang.org/std/net/struct.TcpStream.html";
 
 #[bench]
-fn request_builder_send(b: &mut Bencher) {
-    let mut reader = File::open("benches/res.txt").unwrap();
-
+fn request_send(b: &mut Bencher) {
     b.iter(|| {
         let uri = URI.parse::<Uri>().unwrap();
+        let timeout = Some(Duration::from_secs(6));
         let mut writer = Vec::new();
 
-        RequestBuilder::new(&uri).send(&mut reader, &mut writer)
+        let res = Request::new(&uri)
+            .timeout(timeout)
+            .send(&mut writer)
+            .unwrap();
+
+        res
     });
 }
 

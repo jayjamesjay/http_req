@@ -92,10 +92,7 @@ impl Uri {
     ///assert_eq!(uri.user_info(), Some("user:info"));
     ///```
     pub fn user_info(&self) -> Option<&str> {
-        match self.authority {
-            Some(ref a) => a.user_info(),
-            None => None,
-        }
+        self.authority.as_ref().and_then(|a| a.user_info())
     }
 
     ///Returns host of this `Uri`.
@@ -108,10 +105,7 @@ impl Uri {
     ///assert_eq!(uri.host(), Some("foo.com"));
     ///```
     pub fn host(&self) -> Option<&str> {
-        match self.authority {
-            Some(ref a) => Some(a.host()),
-            None => None,
-        }
+        self.authority.as_ref().map(|a| a.host())
     }
 
     ///Returns host of this `Uri` to use in a header.
@@ -124,13 +118,10 @@ impl Uri {
     ///assert_eq!(uri.host_header(), Some("foo.com:12".to_string()));
     ///```
     pub fn host_header(&self) -> Option<String> {
-        match self.host() {
-            Some(h) => match self.corr_port() {
-                HTTP_PORT | HTTPS_PORT => Some(h.to_string()),
-                p => Some(format!("{}:{}", h, p)),
-            },
-            _ => None,
-        }
+        self.host().map(|h| match self.corr_port() {
+            HTTP_PORT | HTTPS_PORT => h.to_string(),
+            p => format!("{}:{}", h, p),
+        })
     }
 
     ///Returns port of this `Uri`
@@ -143,10 +134,7 @@ impl Uri {
     ///assert_eq!(uri.port(), Some(12));
     ///```
     pub fn port(&self) -> Option<u16> {
-        match &self.authority {
-            Some(a) => a.port(),
-            None => None,
-        }
+        self.authority.as_ref().and_then(|a| a.port())
     }
 
     ///Returns port corresponding to this `Uri`.
@@ -380,10 +368,7 @@ impl Authority {
     ///assert_eq!(auth.port(), Some(443));
     ///```
     pub fn port(&self) -> Option<u16> {
-        match &self.port {
-            Some(p) => Some(self.inner[*p].parse().unwrap()),
-            None => None,
-        }
+        self.port.as_ref().map(|p| self.inner[*p].parse().unwrap())
     }
 }
 
