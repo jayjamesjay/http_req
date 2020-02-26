@@ -469,17 +469,40 @@ impl<'a> RequestBuilder<'a> {
             Some(t) => Instant::now() + t,
             None => Instant::now() + Duration::from_secs(360),
         };
-        let (res, body_part) = self.read_head(stream, head_deadline)?;
+        let (res, mut body_part) = self.read_head(stream, head_deadline)?;
 
-        if self.method != Method::HEAD {
-            writer.write_all(&body_part)?;
+        if self.method == Method::HEAD {
+            return Ok(res);
+        }
 
-            if let Some(timeout) = self.timeout {
-                let deadline = Instant::now() + timeout;
-                copy_with_timeout(stream, writer, deadline)?;
-            } else {
-                io::copy(stream, writer)?;
+        if let Some(v) = res.headers().get("Transfer-Encoding") {
+            if *v == "chunked" {
+                // workflow belows takes a extra memory allocation
+                // @TODO: concat body_part and stream together to avoid the allocation
+                if let Some(timeout) = self.timeout {
+                    let deadline = Instant::now() + timeout;
+                    copy_with_timeout(stream, &mut body_part, deadline)?;
+
+                    let mut dechunked = crate::chunked::Reader::new(body_part.as_slice());
+                    copy_with_timeout(&mut dechunked, writer, deadline)?;
+                } else {
+                    io::copy(stream, &mut body_part)?;
+
+                    let mut dechunked = crate::chunked::Reader::new(body_part.as_slice());
+                    io::copy(&mut dechunked, writer)?;
+                }
+
+                return Ok(res);
             }
+        }
+
+        writer.write_all(&body_part)?;
+
+        if let Some(timeout) = self.timeout {
+            let deadline = Instant::now() + timeout;
+            copy_with_timeout(stream, writer, deadline)?;
+        } else {
+            io::copy(stream, writer)?;
         }
 
         Ok(res)
