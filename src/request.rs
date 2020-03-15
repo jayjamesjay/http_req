@@ -539,12 +539,6 @@ impl<'a> RequestBuilder<'a> {
 ///It creates stream (`TcpStream` or `TlsStream`) appropriate for the type of uri (`http`/`https`)
 ///By default it closes connection after completion of the response.
 ///
-///# About timeouts:
-///
-///- Default timeout for starting connection is 1 minute.
-///- On Linux, `man 7 socket` says that read/write timeouts default to zero, which means
-///  the operations will _never_ time out. However, default value for this builder is 1 minute each.
-///
 ///# Examples
 ///```
 ///use http_req::{request::Request, uri::Uri, response::StatusCode};
@@ -708,7 +702,6 @@ impl<'a> Request<'a> {
     }
 
     ///Sets connection timeout of request.
-    ///By default timeout is set to 3 hours.
     ///
     ///# Examples
     ///```
