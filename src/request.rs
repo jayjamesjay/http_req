@@ -471,15 +471,32 @@ impl<'a> RequestBuilder<'a> {
         };
         let (res, body_part) = self.read_head(stream, head_deadline)?;
 
-        if self.method != Method::HEAD {
-            writer.write_all(&body_part)?;
+        if self.method == Method::HEAD {
+            return Ok(res);
+        }
 
-            if let Some(timeout) = self.timeout {
-                let deadline = Instant::now() + timeout;
-                copy_with_timeout(stream, writer, deadline)?;
-            } else {
-                io::copy(stream, writer)?;
+        if let Some(v) = res.headers().get("Transfer-Encoding") {
+            if *v == "chunked" {
+                let mut dechunked = crate::chunked::Reader::new(body_part.as_slice().chain(stream));
+
+                if let Some(timeout) = self.timeout {
+                    let deadline = Instant::now() + timeout;
+                    copy_with_timeout(&mut dechunked, writer, deadline)?;
+                } else {
+                    io::copy(&mut dechunked, writer)?;
+                }
+
+                return Ok(res);
             }
+        }
+
+        writer.write_all(&body_part)?;
+
+        if let Some(timeout) = self.timeout {
+            let deadline = Instant::now() + timeout;
+            copy_with_timeout(stream, writer, deadline)?;
+        } else {
+            io::copy(stream, writer)?;
         }
 
         Ok(res)
