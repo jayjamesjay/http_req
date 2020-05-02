@@ -74,6 +74,18 @@ where
     }
 }
 
+///Copies a given amount of bytes from `reader` to `writer`.
+pub fn copy_exact<R, W>(reader: &mut R, writer: &mut W, num_bytes: usize) -> io::Result<()>
+where
+    R: Read + ?Sized,
+    W: Write + ?Sized,
+{
+    let mut buf = vec![0u8; num_bytes];
+
+    reader.read_exact(&mut buf)?;
+    writer.write_all(&mut buf)
+}
+
 ///Reads data from `reader` and checks for specified `val`ue. When data contains specified value
 ///or `deadline` is reached, stops reading. Returns read data as array of two vectors: elements
 ///before and after the `val`.
@@ -496,7 +508,13 @@ impl<'a> RequestBuilder<'a> {
             let deadline = Instant::now() + timeout;
             copy_with_timeout(stream, writer, deadline)?;
         } else {
-            io::copy(stream, writer)?;
+            let num_bytes = res.content_len().unwrap_or(0);
+
+            if num_bytes > 0 {
+                copy_exact(stream, writer, num_bytes - body_part.len())?;
+            } else {
+                io::copy(stream, writer)?;
+            }
         }
 
         Ok(res)
