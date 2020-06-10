@@ -1,5 +1,5 @@
 //!error system
-use std::{fmt, io, num, str};
+use std::{error, fmt, io, num, str};
 
 #[derive(Debug, PartialEq)]
 pub enum ParseErr {
@@ -10,6 +10,18 @@ pub enum ParseErr {
     UriErr,
     Invalid,
     Empty,
+}
+
+impl error::Error for ParseErr {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        use self::ParseErr::*;
+
+        match self {
+            Utf8(e) => Some(e),
+            Int(e) => Some(e),
+            StatusErr | HeadersErr | UriErr | Invalid | Empty => None,
+        }
+    }
 }
 
 impl fmt::Display for ParseErr {
@@ -46,6 +58,18 @@ pub enum Error {
     IO(io::Error),
     Parse(ParseErr),
     Tls,
+}
+
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        use self::Error::*;
+
+        match self {
+            IO(e) => Some(e),
+            Parse(e) => Some(e),
+            Tls => None,
+        }
+    }
 }
 
 impl fmt::Display for Error {
