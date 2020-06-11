@@ -383,6 +383,7 @@ impl<'a> RequestBuilder<'a> {
     ///```
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
         self.body = Some(body);
+        self.headers.insert("Content-Length", &body.len());
         self
     }
 
