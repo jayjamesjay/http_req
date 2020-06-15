@@ -389,6 +389,7 @@ impl<'a> RequestBuilder<'a> {
     ///let response = RequestBuilder::new(&addr)
     ///    .method(Method::POST)
     ///    .body(body)
+    ///    .header("Content-Length", &body.len())
     ///    .header("Connection", "Close")
     ///    .send(&mut stream, &mut writer)
     ///    .unwrap();
@@ -727,6 +728,7 @@ impl<'a> Request<'a> {
     ///
     ///let response = Request::new(&uri)
     ///    .method(Method::POST)
+    ///    .header("Content-Length", &body.len())
     ///    .body(body)
     ///    .send(&mut writer)
     ///    .unwrap();
