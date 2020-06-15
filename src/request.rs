@@ -74,6 +74,18 @@ where
     }
 }
 
+///Copies a given amount of bytes from `reader` to `writer`.
+pub fn copy_exact<R, W>(reader: &mut R, writer: &mut W, num_bytes: usize) -> io::Result<()>
+where
+    R: Read + ?Sized,
+    W: Write + ?Sized,
+{
+    let mut buf = vec![0u8; num_bytes];
+
+    reader.read_exact(&mut buf)?;
+    writer.write_all(&mut buf)
+}
+
 ///Reads data from `reader` and checks for specified `val`ue. When data contains specified value
 ///or `deadline` is reached, stops reading. Returns read data as array of two vectors: elements
 ///before and after the `val`.
@@ -471,12 +483,35 @@ impl<'a> RequestBuilder<'a> {
         };
         let (res, body_part) = self.read_head(stream, head_deadline)?;
 
-        if self.method != Method::HEAD {
-            writer.write_all(&body_part)?;
+        if self.method == Method::HEAD {
+            return Ok(res);
+        }
 
-            if let Some(timeout) = self.timeout {
-                let deadline = Instant::now() + timeout;
-                copy_with_timeout(stream, writer, deadline)?;
+        if let Some(v) = res.headers().get("Transfer-Encoding") {
+            if *v == "chunked" {
+                let mut dechunked = crate::chunked::Reader::new(body_part.as_slice().chain(stream));
+
+                if let Some(timeout) = self.timeout {
+                    let deadline = Instant::now() + timeout;
+                    copy_with_timeout(&mut dechunked, writer, deadline)?;
+                } else {
+                    io::copy(&mut dechunked, writer)?;
+                }
+
+                return Ok(res);
+            }
+        }
+
+        writer.write_all(&body_part)?;
+
+        if let Some(timeout) = self.timeout {
+            let deadline = Instant::now() + timeout;
+            copy_with_timeout(stream, writer, deadline)?;
+        } else {
+            let num_bytes = res.content_len().unwrap_or(0);
+
+            if num_bytes > 0 {
+                copy_exact(stream, writer, num_bytes - body_part.len())?;
             } else {
                 io::copy(stream, writer)?;
             }
