@@ -963,6 +963,32 @@ pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
     Request::new(&uri).method(Method::HEAD).send(&mut writer)
 }
 
+///Creates and sends POST request. Returns response for this request.
+///
+///# Examples
+///```
+///use http_req::request;
+///
+///let mut writer = Vec::new();
+///const uri: &str = "https://www.rust-lang.org/learn";
+///const body: &[u8; 27] = b"field1=value1&field2=value2";
+///
+///let response = request::post(uri, &mut writer, body).unwrap();
+///```
+pub fn post<T: AsRef<str>, U: Write>(
+    uri: T,
+    writer: &mut U,
+    body: &[u8],
+) -> Result<Response, error::Error> {
+    let uri = uri.as_ref().parse::<Uri>()?;
+
+    Request::new(&uri)
+        .method(Method::POST)
+        .header("Content-Length", &body.len())
+        .body(body)
+        .send(writer)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
