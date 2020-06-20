@@ -973,12 +973,12 @@ pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
 ///const uri: &str = "https://www.rust-lang.org/learn";
 ///const body: &[u8; 27] = b"field1=value1&field2=value2";
 ///
-///let response = request::post(uri, &mut writer, body).unwrap();
+///let response = request::post(uri, body, &mut writer).unwrap();
 ///```
 pub fn post<T: AsRef<str>, U: Write>(
-    uri: T,
-    writer: &mut U,
+    uri: T,    
     body: &[u8],
+    writer: &mut U,
 ) -> Result<Response, error::Error> {
     let uri = uri.as_ref().parse::<Uri>()?;
 
@@ -1313,6 +1313,20 @@ mod tests {
         assert_ne!(res.status_code(), UNSUCCESS_CODE);
 
         let res = head(URI_S).unwrap();
+        assert_ne!(res.status_code(), UNSUCCESS_CODE);
+    }
+
+    #[ignore]
+    #[test]
+    fn request_post() {
+        let mut writer = Vec::new();
+        let res = post(URI, &BODY, &mut writer).unwrap();
+
+        assert_ne!(res.status_code(), UNSUCCESS_CODE);
+
+        let mut writer = Vec::with_capacity(200);
+        let res = post(URI_S, &BODY, &mut writer).unwrap();
+
         assert_ne!(res.status_code(), UNSUCCESS_CODE);
     }
 }

@@ -219,6 +219,7 @@ mod tests {
         let mut reader = Reader::new(data);
         let mut writer = vec![];
         io::copy(&mut reader, &mut writer).expect("failed to dechunk");
+
         assert_eq!("hello, world! 0123456789abcdef".as_bytes(), &writer[..]);
     }
     #[test]
@@ -228,6 +229,7 @@ mod tests {
             let mut reader = Reader::new(data);
             let mut writer = vec![0u8; 10];
             let n = reader.read(&mut writer).expect("unexpect error");
+
             assert_eq!(6, n, "invalid buffer length: expect {}, got {}", 6, n);
             assert_eq!("foobar".as_bytes(), &writer[..6]);
         }
@@ -236,6 +238,7 @@ mod tests {
             let mut reader = Reader::new(data);
             let mut writer = vec![0u8; 3];
             let n = reader.read(&mut writer).expect("unexpect error");
+
             assert_eq!(3, n, "invalid buffer length");
             assert_eq!("foo".as_bytes(), &writer[..]);
         }
@@ -246,19 +249,20 @@ mod tests {
         let mut reader = Reader::new(data);
         let mut writer = vec![];
         io::copy(&mut reader, &mut writer).expect("failed to dechunk");
+
         assert_eq!("1234567".as_bytes(), &writer[..]);
     }
     #[test]
     fn read_ignore_extensions() {
-        let data_str = String::from("7;ext=\"some quoted string\"\r\n") +
-            "hello, \r\n" +
-            "17;someext\r\n" + // token without value
-            "world! 0123456789abcdef\r\n" +
-            "0;someextension=sometoken\r\n"; // token=token
+        let data_str = String::from("7;ext=\"some quoted string\"\r\n")
+            + "hello, \r\n"
+            + "17;someext\r\n"
+            + "world! 0123456789abcdef\r\n"
+            + "0;someextension=sometoken\r\n";
         let data = data_str.as_bytes();
         let mut reader = Reader::new(data);
         let mut writer = vec![];
-        //io::copy(&mut reader, &mut writer).expect("failed to dechunk");
+
         reader.read_to_end(&mut writer).expect("failed to dechunk");
         assert_eq!("hello, world! 0123456789abcdef".as_bytes(), &writer[..]);
     }
