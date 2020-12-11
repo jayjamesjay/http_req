@@ -1,5 +1,5 @@
 # http_req
-[![Build Status](https://travis-ci.org/jayjamesjay/http_req.svg?branch=master)](https://travis-ci.org/jayjamesjay/http_req)
+[![Build Status](https://travis-ci.com/jayjamesjay/http_req.svg?branch=master)](https://travis-ci.com/jayjamesjay/http_req)
 [![Crates.io](https://img.shields.io/badge/crates.io-v0.7.2-orange.svg?longCache=true)](https://crates.io/crates/http_req)
 [![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.7.2/http_req/)
 
