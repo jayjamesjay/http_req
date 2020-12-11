@@ -18,7 +18,7 @@ fn parse_response(b: &mut Bencher) {
     });
 }
 
-const URI: &str = "https://doc.rust-lang.org/std/net/struct.TcpStream.html";
+const URI: &str = "https://www.rust-lang.org/";
 
 #[bench]
 fn request_send(b: &mut Bencher) {
