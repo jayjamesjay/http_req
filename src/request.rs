@@ -976,7 +976,7 @@ pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
 ///let response = request::post(uri, body, &mut writer).unwrap();
 ///```
 pub fn post<T: AsRef<str>, U: Write>(
-    uri: T,    
+    uri: T,
     body: &[u8],
     writer: &mut U,
 ) -> Result<Response, error::Error> {

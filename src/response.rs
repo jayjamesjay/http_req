@@ -92,7 +92,7 @@ impl Response {
     ///let response = Response::try_from(RESPONSE, &mut body).unwrap();
     ///assert_eq!(response.status_code(), StatusCode::new(200));
     ///```
-    pub fn status_code(&self) -> StatusCode {
+    pub const fn status_code(&self) -> StatusCode {
         self.status.code
     }
 
@@ -186,6 +186,12 @@ pub struct Status {
     version: String,
     code: StatusCode,
     reason: String,
+}
+
+impl Status {
+    pub fn new(version: &str, code: StatusCode, reason: &str) -> Status {
+        Status::from((version, code, reason))
+    }
 }
 
 impl<T, U, V> From<(T, U, V)> for Status
