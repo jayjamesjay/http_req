@@ -331,8 +331,9 @@ impl Headers {
     ///# Examples
     ///```
     ///use http_req::{response::Headers, uri::Uri};
+    ///use std::convert::TryFrom;
     ///
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///let headers = Headers::default_http(&uri);
     ///```
     pub fn default_http(uri: &Uri) -> Headers {
@@ -621,6 +622,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::TryFrom;
 
     const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
                                          Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
@@ -793,9 +795,7 @@ mod tests {
 
     #[test]
     fn headers_default_http() {
-        let uri = "http://doc.rust-lang.org/std/string/index.html"
-            .parse()
-            .unwrap();
+        let uri = Uri::try_from("http://doc.rust-lang.org/std/string/index.html").unwrap();
 
         let mut headers = Headers::with_capacity(4);
         headers.insert("Host", "doc.rust-lang.org");

@@ -6,6 +6,7 @@ use crate::{
     uri::Uri,
 };
 use std::{
+    convert::TryFrom,
     fmt,
     io::{self, ErrorKind, Read, Write},
     net::{TcpStream, ToSocketAddrs},
@@ -189,10 +190,10 @@ impl fmt::Display for HttpVersion {
 ///
 ///# Examples
 ///```
-///use std::net::TcpStream;
+///use std::{net::TcpStream, convert::TryFrom};
 ///use http_req::{request::RequestBuilder, tls, uri::Uri, response::StatusCode};
 ///
-///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+///let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
 ///let mut writer = Vec::new();
 ///
 ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
@@ -209,7 +210,7 @@ impl fmt::Display for HttpVersion {
 ///```
 #[derive(Clone, Debug, PartialEq)]
 pub struct RequestBuilder<'a> {
-    uri: &'a Uri,
+    uri: &'a Uri<'a>,
     method: Method,
     version: HttpVersion,
     headers: Headers,
@@ -222,10 +223,10 @@ impl<'a> RequestBuilder<'a> {
     ///
     ///# Examples
     ///```
-    ///use std::net::TcpStream;
+    ///use std::{net::TcpStream, convert::TryFrom};
     ///use http_req::{request::RequestBuilder, tls, uri::Uri};
     ///
-    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///let mut writer = Vec::new();
     ///
     ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
@@ -238,7 +239,7 @@ impl<'a> RequestBuilder<'a> {
     ///    .send(&mut stream, &mut writer)
     ///    .unwrap();
     ///```
-    pub fn new(uri: &'a Uri) -> RequestBuilder<'a> {
+    pub fn new(uri: &'a Uri<'a>) -> RequestBuilder<'a> {
         RequestBuilder {
             headers: Headers::default_http(uri),
             uri,
@@ -253,10 +254,10 @@ impl<'a> RequestBuilder<'a> {
     ///
     ///# Examples
     ///```
-    ///use std::net::TcpStream;
+    ///use std::{net::TcpStream, convert::TryFrom};
     ///use http_req::{request::{RequestBuilder, Method}, tls, uri::Uri};
     ///
-    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let addr= Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///let mut writer = Vec::new();
     ///
     ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
@@ -282,10 +283,10 @@ impl<'a> RequestBuilder<'a> {
     ///
     ///# Examples
     ///```
-    ///use std::net::TcpStream;
+    ///use std::{net::TcpStream, convert::TryFrom};
     ///use http_req::{request::{RequestBuilder, HttpVersion}, tls, uri::Uri};
     ///
-    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///let mut writer = Vec::new();
     ///
     ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
@@ -312,10 +313,10 @@ impl<'a> RequestBuilder<'a> {
     ///
     ///# Examples
     ///```
-    ///use std::net::TcpStream;
+    ///use std::{net::TcpStream, convert::TryFrom};
     ///use http_req::{request::{RequestBuilder, Method}, response::Headers, tls, uri::Uri};
     ///
-    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///let mut writer = Vec::new();
     ///let mut headers = Headers::new();
     ///headers.insert("Accept-Charset", "utf-8");
@@ -345,10 +346,10 @@ impl<'a> RequestBuilder<'a> {
     ///
     ///# Examples
     ///```
-    ///use std::net::TcpStream;
+    ///use std::{net::TcpStream, convert::TryFrom};
     ///use http_req::{request::{RequestBuilder, Method}, tls, uri::Uri};
     ///
-    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///let mut writer = Vec::new();
     ///
     ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
@@ -374,10 +375,10 @@ impl<'a> RequestBuilder<'a> {
     ///
     ///# Examples
     ///```
-    ///use std::net::TcpStream;
+    ///use std::{net::TcpStream, convert::TryFrom};
     ///use http_req::{request::{RequestBuilder, Method}, tls, uri::Uri};
     ///
-    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///const body: &[u8; 27] = b"field1=value1&field2=value2";
     ///let mut writer = Vec::new();
     ///
@@ -403,10 +404,10 @@ impl<'a> RequestBuilder<'a> {
     ///
     ///# Examples
     ///```
-    ///use std::{net::TcpStream, time::{Duration, Instant}};
+    ///use std::{net::TcpStream, time::{Duration, Instant}, convert::TryFrom};
     ///use http_req::{request::RequestBuilder, tls, uri::Uri};
     ///
-    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///let mut writer = Vec::new();
     ///
     ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
@@ -439,11 +440,11 @@ impl<'a> RequestBuilder<'a> {
     ///
     ///HTTP
     ///```
-    ///use std::net::TcpStream;
+    ///use std::{net::TcpStream, convert::TryFrom};
     ///use http_req::{request::RequestBuilder, uri::Uri};
     ///
     /// //This address is automatically redirected to HTTPS, so response code will not ever be 200
-    ///let addr: Uri = "http://www.rust-lang.org/learn".parse().unwrap();
+    ///let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///let mut writer = Vec::new();
     ///let mut stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
     ///
@@ -455,10 +456,10 @@ impl<'a> RequestBuilder<'a> {
     ///
     ///HTTPS
     ///```
-    ///use std::net::TcpStream;
+    ///use std::{net::TcpStream, convert::TryFrom};
     ///use http_req::{request::RequestBuilder, tls, uri::Uri};
     ///
-    ///let addr: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///let mut writer = Vec::new();
     ///
     ///let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
@@ -578,9 +579,10 @@ impl<'a> RequestBuilder<'a> {
 ///# Examples
 ///```
 ///use http_req::{request::Request, uri::Uri, response::StatusCode};
+///use std::convert::TryFrom;
 ///
 ///let mut writer = Vec::new();
-///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
 ///
 ///let response = Request::new(&uri).send(&mut writer).unwrap();;
 ///assert_eq!(response.status_code(), StatusCode::new(200));
@@ -601,9 +603,10 @@ impl<'a> Request<'a> {
     ///# Examples
     ///```
     ///use http_req::{request::Request, uri::Uri};
+    ///use std::convert::TryFrom;
     ///
     ///let mut writer = Vec::new();
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
     ///let response = Request::new(&uri).send(&mut writer).unwrap();;
     ///```
@@ -625,9 +628,10 @@ impl<'a> Request<'a> {
     ///# Examples
     ///```
     ///use http_req::{request::{Request, Method}, uri::Uri};
+    ///use std::convert::TryFrom;
     ///
     ///let mut writer = Vec::new();
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
     ///let response = Request::new(&uri)
     ///    .method(Method::HEAD)
@@ -647,9 +651,10 @@ impl<'a> Request<'a> {
     ///# Examples
     ///```
     ///use http_req::{request::{Request, HttpVersion}, uri::Uri};
+    ///use std::convert::TryFrom;
     ///
     ///let mut writer = Vec::new();
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
     ///let response = Request::new(&uri)
     ///    .version(HttpVersion::Http10)
@@ -670,9 +675,10 @@ impl<'a> Request<'a> {
     ///# Examples
     ///```
     ///use http_req::{request::Request, uri::Uri, response::Headers};
+    ///use std::convert::TryFrom;
     ///
     ///let mut writer = Vec::new();
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
     ///let mut headers = Headers::new();
     ///headers.insert("Accept-Charset", "utf-8");
@@ -698,9 +704,10 @@ impl<'a> Request<'a> {
     ///# Examples
     ///```
     ///use http_req::{request::Request, uri::Uri};
+    ///use std::convert::TryFrom;
     ///
     ///let mut writer = Vec::new();
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
     ///let response = Request::new(&uri)
     ///    .header("Accept-Language", "en-US")
@@ -721,9 +728,10 @@ impl<'a> Request<'a> {
     ///# Examples
     ///```
     ///use http_req::{request::{Request, Method}, uri::Uri};
+    ///use std::convert::TryFrom;
     ///
     ///let mut writer = Vec::new();
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///const body: &[u8; 27] = b"field1=value1&field2=value2";
     ///
     ///let response = Request::new(&uri)
@@ -742,11 +750,11 @@ impl<'a> Request<'a> {
     ///
     ///# Examples
     ///```
-    ///use std::time::{Duration, Instant};
+    ///use std::{time::{Duration, Instant}, convert::TryFrom};
     ///use http_req::{request::Request, uri::Uri};
     ///
     ///let mut writer = Vec::new();
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///const body: &[u8; 27] = b"field1=value1&field2=value2";
     ///let timeout = Some(Duration::from_secs(3600));
     ///
@@ -777,10 +785,10 @@ impl<'a> Request<'a> {
     ///# Examples
     ///```
     ///use http_req::{request::Request, uri::Uri};
-    ///use std::time::Duration;
+    ///use std::{time::Duration, convert::TryFrom};
     ///
     ///let mut writer = Vec::new();
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///const time: Option<Duration> = Some(Duration::from_secs(10));
     ///
     ///let response = Request::new(&uri)
@@ -806,10 +814,10 @@ impl<'a> Request<'a> {
     ///# Examples
     ///```
     ///use http_req::{request::Request, uri::Uri};
-    ///use std::time::Duration;
+    ///use std::{time::Duration, convert::TryFrom};
     ///
     ///let mut writer = Vec::new();
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///const time: Option<Duration> = Some(Duration::from_secs(15));
     ///
     ///let response = Request::new(&uri)
@@ -835,10 +843,10 @@ impl<'a> Request<'a> {
     ///# Examples
     ///```
     ///use http_req::{request::Request, uri::Uri};
-    ///use std::time::Duration;
+    ///use std::{time::Duration, convert::TryFrom};
     ///
     ///let mut writer = Vec::new();
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///const time: Option<Duration> = Some(Duration::from_secs(5));
     ///
     ///let response = Request::new(&uri)
@@ -868,9 +876,10 @@ impl<'a> Request<'a> {
     ///# Examples
     ///```
     ///use http_req::{request::Request, uri::Uri};
+    ///use std::convert::TryFrom;
     ///
     ///let mut writer = Vec::new();
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
     ///let response = Request::new(&uri).send(&mut writer).unwrap();
     ///```
@@ -942,7 +951,7 @@ where
 ///let response = request::get(uri, &mut writer).unwrap();
 ///```
 pub fn get<T: AsRef<str>, U: Write>(uri: T, writer: &mut U) -> Result<Response, error::Error> {
-    let uri = uri.as_ref().parse::<Uri>()?;
+    let uri = Uri::try_from(uri.as_ref())?;
 
     Request::new(&uri).send(writer)
 }
@@ -958,7 +967,7 @@ pub fn get<T: AsRef<str>, U: Write>(uri: T, writer: &mut U) -> Result<Response, 
 ///```
 pub fn head<T: AsRef<str>>(uri: T) -> Result<Response, error::Error> {
     let mut writer = Vec::new();
-    let uri = uri.as_ref().parse::<Uri>()?;
+    let uri = Uri::try_from(uri.as_ref())?;
 
     Request::new(&uri).method(Method::HEAD).send(&mut writer)
 }
@@ -980,7 +989,7 @@ pub fn post<T: AsRef<str>, U: Write>(
     body: &[u8],
     writer: &mut U,
 ) -> Result<Response, error::Error> {
-    let uri = uri.as_ref().parse::<Uri>()?;
+    let uri = Uri::try_from(uri.as_ref())?;
 
     Request::new(&uri)
         .method(Method::POST)
@@ -1056,13 +1065,13 @@ mod tests {
 
     #[test]
     fn request_b_new() {
-        RequestBuilder::new(&URI.parse().unwrap());
-        RequestBuilder::new(&URI_S.parse().unwrap());
+        RequestBuilder::new(&Uri::try_from(URI).unwrap());
+        RequestBuilder::new(&Uri::try_from(URI_S).unwrap());
     }
 
     #[test]
     fn request_b_method() {
-        let uri: Uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut req = RequestBuilder::new(&uri);
         let req = req.method(Method::HEAD);
 
@@ -1077,7 +1086,7 @@ mod tests {
         headers.insert("Host", "doc.rust-lang.org");
         headers.insert("Connection", "Close");
 
-        let uri: Uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut req = RequestBuilder::new(&uri);
         let req = req.headers(headers.clone());
 
@@ -1086,7 +1095,7 @@ mod tests {
 
     #[test]
     fn request_b_header() {
-        let uri: Uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut req = RequestBuilder::new(&uri);
         let k = "Connection";
         let v = "Close";
@@ -1103,7 +1112,7 @@ mod tests {
 
     #[test]
     fn request_b_body() {
-        let uri: Uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut req = RequestBuilder::new(&uri);
         let req = req.body(&BODY);
 
@@ -1112,7 +1121,7 @@ mod tests {
 
     #[test]
     fn request_b_timeout() {
-        let uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut req = RequestBuilder::new(&uri);
         let timeout = Some(Duration::from_secs(360));
 
@@ -1124,10 +1133,10 @@ mod tests {
     #[test]
     fn request_b_send() {
         let mut writer = Vec::new();
-        let uri: Uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut stream = TcpStream::connect((uri.host().unwrap_or(""), uri.corr_port())).unwrap();
 
-        RequestBuilder::new(&URI.parse().unwrap())
+        RequestBuilder::new(&Uri::try_from(URI).unwrap())
             .header("Connection", "Close")
             .send(&mut stream, &mut writer)
             .unwrap();
@@ -1137,14 +1146,14 @@ mod tests {
     #[test]
     fn request_b_send_secure() {
         let mut writer = Vec::new();
-        let uri: Uri = URI_S.parse().unwrap();
+        let uri = Uri::try_from(URI_S).unwrap();
 
         let stream = TcpStream::connect((uri.host().unwrap_or(""), uri.corr_port())).unwrap();
         let mut secure_stream = tls::Config::default()
             .connect(uri.host().unwrap_or(""), stream)
             .unwrap();
 
-        RequestBuilder::new(&URI_S.parse().unwrap())
+        RequestBuilder::new(&Uri::try_from(URI_S).unwrap())
             .header("Connection", "Close")
             .send(&mut secure_stream, &mut writer)
             .unwrap();
@@ -1152,7 +1161,7 @@ mod tests {
 
     #[test]
     fn request_b_parse_msg() {
-        let uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let req = RequestBuilder::new(&uri);
 
         const DEFAULT_MSG: &str = "GET /std/string/index.html HTTP/1.1\r\n\
@@ -1172,13 +1181,13 @@ mod tests {
 
     #[test]
     fn request_new() {
-        let uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         Request::new(&uri);
     }
 
     #[test]
     fn request_method() {
-        let uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut req = Request::new(&uri);
         req.method(Method::HEAD);
 
@@ -1193,7 +1202,7 @@ mod tests {
         headers.insert("Host", "doc.rust-lang.org");
         headers.insert("Connection", "Close");
 
-        let uri: Uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut req = Request::new(&uri);
         let req = req.headers(headers.clone());
 
@@ -1202,7 +1211,7 @@ mod tests {
 
     #[test]
     fn request_header() {
-        let uri: Uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut req = Request::new(&uri);
         let k = "Accept-Language";
         let v = "en-US";
@@ -1220,7 +1229,7 @@ mod tests {
 
     #[test]
     fn request_body() {
-        let uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut req = Request::new(&uri);
         let req = req.body(&BODY);
 
@@ -1229,7 +1238,7 @@ mod tests {
 
     #[test]
     fn request_timeout() {
-        let uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut request = Request::new(&uri);
         let timeout = Some(Duration::from_secs(360));
 
@@ -1239,7 +1248,7 @@ mod tests {
 
     #[test]
     fn request_connect_timeout() {
-        let uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut request = Request::new(&uri);
         request.connect_timeout(Some(Duration::from_nanos(1)));
 
@@ -1255,7 +1264,7 @@ mod tests {
     #[ignore]
     #[test]
     fn request_read_timeout() {
-        let uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut request = Request::new(&uri);
         request.read_timeout(Some(Duration::from_nanos(1)));
 
@@ -1276,7 +1285,7 @@ mod tests {
 
     #[test]
     fn request_write_timeout() {
-        let uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let mut request = Request::new(&uri);
         request.write_timeout(Some(Duration::from_nanos(100)));
 
@@ -1286,7 +1295,7 @@ mod tests {
     #[test]
     fn request_send() {
         let mut writer = Vec::new();
-        let uri = URI.parse().unwrap();
+        let uri = Uri::try_from(URI).unwrap();
         let res = Request::new(&uri).send(&mut writer).unwrap();
 
         assert_ne!(res.status_code(), UNSUCCESS_CODE);
