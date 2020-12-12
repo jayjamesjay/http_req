@@ -419,7 +419,7 @@ impl StatusCode {
     ///const code: StatusCode = StatusCode::new(101);
     ///assert!(code.is_info())
     ///```
-    pub fn is_info(self) -> bool {
+    pub const fn is_info(self) -> bool {
         self.0 >= 100 && self.0 < 200
     }
 
@@ -432,7 +432,7 @@ impl StatusCode {
     ///const code: StatusCode = StatusCode::new(204);
     ///assert!(code.is_success())
     ///```
-    pub fn is_success(self) -> bool {
+    pub const fn is_success(self) -> bool {
         self.0 >= 200 && self.0 < 300
     }
 
@@ -445,7 +445,7 @@ impl StatusCode {
     ///const code: StatusCode = StatusCode::new(301);
     ///assert!(code.is_redirect())
     ///```
-    pub fn is_redirect(self) -> bool {
+    pub const fn is_redirect(self) -> bool {
         self.0 >= 300 && self.0 < 400
     }
 
@@ -458,7 +458,7 @@ impl StatusCode {
     ///const code: StatusCode = StatusCode::new(400);
     ///assert!(code.is_client_err())
     ///```
-    pub fn is_client_err(self) -> bool {
+    pub const fn is_client_err(self) -> bool {
         self.0 >= 400 && self.0 < 500
     }
 
@@ -471,7 +471,7 @@ impl StatusCode {
     ///const code: StatusCode = StatusCode::new(503);
     ///assert!(code.is_server_err())
     ///```
-    pub fn is_server_err(self) -> bool {
+    pub const fn is_server_err(self) -> bool {
         self.0 >= 500 && self.0 < 600
     }
 
@@ -497,7 +497,7 @@ impl StatusCode {
     ///const code: StatusCode = StatusCode::new(200);
     ///assert_eq!(code.reason(), Some("OK"))
     ///```
-    pub fn reason(self) -> Option<&'static str> {
+    pub const fn reason(self) -> Option<&'static str> {
         let reason = match self.0 {
             100 => "Continue",
             101 => "Switching Protocols",

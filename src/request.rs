@@ -27,7 +27,7 @@ pub struct Counter {
 }
 
 impl Counter {
-    pub fn new(stop: usize) -> Counter {
+    pub const fn new(stop: usize) -> Counter {
         Counter { count: 0, stop }
     }
 }
@@ -98,7 +98,7 @@ where
     R: Read + ?Sized,
 {
     let mut buf = [0; SMALL_BUF_SIZE];
-    let mut writer = Vec::new();
+    let mut writer = Vec::with_capacity(SMALL_BUF_SIZE);
     let mut counter = Counter::new(TEST_FREQ);
     let mut split_idx = 0;
 
@@ -165,7 +165,7 @@ pub enum HttpVersion {
 }
 
 impl HttpVersion {
-    pub fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         use self::HttpVersion::*;
 
         match self {
