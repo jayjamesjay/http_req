@@ -49,6 +49,7 @@ impl Iterator for Counter {
 }
 
 ///Copies data from `reader` to `writer` until the `deadline` is reached.
+///Limitations of current implementation may cause exceeding the deadline.
 ///Returns how many bytes has been read.
 pub fn copy_with_timeout<R, W>(reader: &mut R, writer: &mut W, deadline: Instant) -> io::Result<u64>
 where
