@@ -26,11 +26,11 @@ version = "^0.19"
 optional = true
 
 [dependencies.webpki]
-version = "^0.21"
+version = "^0.22"
 optional = true
 
 [dependencies.webpki-roots]
-version = "^0.21"
+version = "^0.22"
 optional = true
 
 [badges]

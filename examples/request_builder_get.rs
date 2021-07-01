@@ -1,9 +1,9 @@
 use http_req::{request::RequestBuilder, tls, uri::Uri};
-use std::net::TcpStream;
+use std::{convert::TryFrom, net::TcpStream};
 
 fn main() {
     //Parse uri and assign it to variable `addr`
-    let addr: Uri = "https://doc.rust-lang.org/".parse().unwrap();
+    let addr: Uri = Uri::try_from("https://doc.rust-lang.org/").unwrap();
 
     //Connect to remote host
     let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();

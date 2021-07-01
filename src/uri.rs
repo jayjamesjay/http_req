@@ -1,6 +1,7 @@
 //! uri operations
 use crate::error::{Error, ParseErr};
 use std::{
+    convert::TryFrom,
     fmt,
     ops::{Index, Range},
     str,
@@ -40,6 +41,15 @@ impl From<RangeC> for Range<usize> {
     }
 }
 
+impl Index<RangeC> for str {
+    type Output = str;
+
+    #[inline]
+    fn index(&self, index: RangeC) -> &str {
+        &self[..][Range::from(index)]
+    }
+}
+
 impl Index<RangeC> for String {
     type Output = str;
 
@@ -54,28 +64,30 @@ impl Index<RangeC> for String {
 ///# Example
 ///```
 ///use http_req::uri::Uri;
+///use std::convert::TryFrom;
 ///
-///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
 ///assert_eq!(uri.host(), Some("foo.com"));
 ///```
 #[derive(Clone, Debug, PartialEq)]
-pub struct Uri {
-    inner: String,
+pub struct Uri<'a> {
+    inner: &'a str,
     scheme: RangeC,
-    authority: Option<Authority>,
+    authority: Option<Authority<'a>>,
     path: Option<RangeC>,
     query: Option<RangeC>,
     fragment: Option<RangeC>,
 }
 
-impl Uri {
+impl<'a> Uri<'a> {
     ///Returns scheme of this `Uri`.
     ///
     ///# Example
     ///```
     ///use http_req::uri::Uri;
+    ///use std::convert::TryFrom;
     ///
-    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
     ///assert_eq!(uri.scheme(), "https");
     ///```
     pub fn scheme(&self) -> &str {
@@ -87,8 +99,9 @@ impl Uri {
     ///# Example
     ///```
     ///use http_req::uri::Uri;
+    ///use std::convert::TryFrom;
     ///
-    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
     ///assert_eq!(uri.user_info(), Some("user:info"));
     ///```
     pub fn user_info(&self) -> Option<&str> {
@@ -100,8 +113,9 @@ impl Uri {
     ///# Example
     ///```
     ///use http_req::uri::Uri;
+    ///use std::convert::TryFrom;
     ///
-    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
     ///assert_eq!(uri.host(), Some("foo.com"));
     ///```
     pub fn host(&self) -> Option<&str> {
@@ -113,8 +127,9 @@ impl Uri {
     ///# Example
     ///```
     ///use http_req::uri::Uri;
+    ///use std::convert::TryFrom;
     ///
-    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
     ///assert_eq!(uri.host_header(), Some("foo.com:12".to_string()));
     ///```
     pub fn host_header(&self) -> Option<String> {
@@ -129,8 +144,9 @@ impl Uri {
     ///# Example
     ///```
     ///use http_req::uri::Uri;
+    ///use std::convert::TryFrom;
     ///
-    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
     ///assert_eq!(uri.port(), Some(12));
     ///```
     pub fn port(&self) -> Option<u16> {
@@ -143,8 +159,9 @@ impl Uri {
     ///# Example
     ///```
     ///use http_req::uri::Uri;
+    ///use std::convert::TryFrom;
     ///
-    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
     ///assert_eq!(uri.corr_port(), 12);
     ///```
     pub fn corr_port(&self) -> u16 {
@@ -164,8 +181,9 @@ impl Uri {
     ///# Example
     ///```
     ///use http_req::uri::Uri;
+    ///use std::convert::TryFrom;
     ///
-    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
     ///assert_eq!(uri.path(), Some("/bar/baz"));
     ///```
     pub fn path(&self) -> Option<&str> {
@@ -177,8 +195,9 @@ impl Uri {
     ///# Example
     ///```
     ///use http_req::uri::Uri;
+    ///use std::convert::TryFrom;
     ///
-    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
     ///assert_eq!(uri.query(), Some("query"));
     ///```
     pub fn query(&self) -> Option<&str> {
@@ -190,8 +209,9 @@ impl Uri {
     ///# Example
     ///```
     ///use http_req::uri::Uri;
+    ///use std::convert::TryFrom;
     ///
-    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
     ///assert_eq!(uri.fragment(), Some("fragment"));
     ///```
     pub fn fragment(&self) -> Option<&str> {
@@ -203,8 +223,9 @@ impl Uri {
     ///# Example
     ///```
     ///use http_req::uri::Uri;
+    ///use std::convert::TryFrom;
     ///
-    ///let uri: Uri = "https://user:info@foo.com:12/bar/baz?query#fragment".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
     ///assert_eq!(uri.resource(), "/bar/baz?query#fragment");
     ///```
     pub fn resource(&self) -> &str {
@@ -221,7 +242,7 @@ impl Uri {
     }
 }
 
-impl fmt::Display for Uri {
+impl<'a> fmt::Display for Uri<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let uri = if let Some(auth) = &self.authority {
             let mut uri = self.inner.to_string();
@@ -238,13 +259,10 @@ impl fmt::Display for Uri {
     }
 }
 
-impl str::FromStr for Uri {
-    type Err = Error;
+impl<'a> TryFrom<&'a str> for Uri<'a> {
+    type Error = Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut s = s.to_string();
-        remove_spaces(&mut s);
-
+    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         let (scheme, mut uri_part) = get_chunks(&s, Some(RangeC::new(0, s.len())), ":");
         let scheme = scheme.ok_or(ParseErr::UriErr)?;
 
@@ -255,7 +273,7 @@ impl str::FromStr for Uri {
                 let (auth, part) = get_chunks(&s, Some(RangeC::new(u.start + 2, u.end)), "/");
 
                 authority = if let Some(a) = auth {
-                    Some(s[a].parse()?)
+                    Some(Authority::try_from(&s[a])?)
                 } else {
                     None
                 };
@@ -288,30 +306,32 @@ impl str::FromStr for Uri {
 ///# Example
 ///```
 ///use http_req::uri::Authority;
+///use std::convert::TryFrom;
 ///
-///let auth: Authority = "user:info@foo.com:443".parse().unwrap();
+///let auth: Authority = Authority::try_from("user:info@foo.com:443").unwrap();
 ///assert_eq!(auth.host(), "foo.com");
 ///```
 #[derive(Clone, Debug, PartialEq)]
-pub struct Authority {
-    inner: String,
+pub struct Authority<'a> {
+    inner: &'a str,
     username: Option<RangeC>,
     password: Option<RangeC>,
     host: RangeC,
     port: Option<RangeC>,
 }
 
-impl Authority {
+impl<'a> Authority<'a> {
     ///Returns username of this `Authority`
     ///
     ///# Example
     ///```
     ///use http_req::uri::Authority;
+    ///use std::convert::TryFrom;
     ///
-    ///let auth: Authority = "user:info@foo.com:443".parse().unwrap();
+    ///let auth: Authority = Authority::try_from("user:info@foo.com:443").unwrap();
     ///assert_eq!(auth.username(), Some("user"));
     ///```
-    pub fn username(&self) -> Option<&str> {
+    pub fn username(&self) -> Option<&'a str> {
         self.username.map(|r| &self.inner[r])
     }
 
@@ -320,8 +340,9 @@ impl Authority {
     ///# Example
     ///```
     ///use http_req::uri::Authority;
+    ///use std::convert::TryFrom;
     ///
-    ///let auth: Authority = "user:info@foo.com:443".parse().unwrap();
+    ///let auth: Authority = Authority::try_from("user:info@foo.com:443").unwrap();
     ///assert_eq!(auth.password(), Some("info"));
     ///```
     pub fn password(&self) -> Option<&str> {
@@ -333,8 +354,9 @@ impl Authority {
     ///# Example
     ///```
     ///use http_req::uri::Authority;
+    ///use std::convert::TryFrom;
     ///
-    ///let auth: Authority = "user:info@foo.com:443".parse().unwrap();
+    ///let auth: Authority = Authority::try_from("user:info@foo.com:443").unwrap();
     ///assert_eq!(auth.user_info(), Some("user:info"));
     ///```
     pub fn user_info(&self) -> Option<&str> {
@@ -350,8 +372,9 @@ impl Authority {
     ///# Example
     ///```
     ///use http_req::uri::Authority;
+    ///use std::convert::TryFrom;
     ///
-    ///let auth: Authority = "user:info@foo.com:443".parse().unwrap();
+    ///let auth: Authority = Authority::try_from("user:info@foo.com:443").unwrap();
     ///assert_eq!(auth.host(), "foo.com");
     ///```
     pub fn host(&self) -> &str {
@@ -363,8 +386,9 @@ impl Authority {
     ///# Example
     ///```
     ///use http_req::uri::Authority;
+    ///use std::convert::TryFrom;
     ///
-    ///let auth: Authority = "user:info@foo.com:443".parse().unwrap();
+    ///let auth: Authority = Authority::try_from("user:info@foo.com:443").unwrap();
     ///assert_eq!(auth.port(), Some(443));
     ///```
     pub fn port(&self) -> Option<u16> {
@@ -372,12 +396,10 @@ impl Authority {
     }
 }
 
-impl str::FromStr for Authority {
-    type Err = ParseErr;
+impl<'a> TryFrom<&'a str> for Authority<'a> {
+    type Error = ParseErr;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let inner = s.to_string();
-
+    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         let mut username = None;
         let mut password = None;
 
@@ -402,13 +424,13 @@ impl str::FromStr for Authority {
         let host = host.ok_or(ParseErr::UriErr)?;
 
         if let Some(p) = port {
-            if inner[p].parse::<u16>().is_err() {
+            if s[p].parse::<u16>().is_err() {
                 return Err(ParseErr::UriErr);
             }
         }
 
         Ok(Authority {
-            inner,
+            inner: s,
             username,
             password,
             host,
@@ -417,7 +439,7 @@ impl str::FromStr for Authority {
     }
 }
 
-impl fmt::Display for Authority {
+impl<'a> fmt::Display for Authority<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let auth = if let Some(pass) = self.password {
             let range = Range::from(pass);
@@ -436,7 +458,7 @@ impl fmt::Display for Authority {
 }
 
 //Removes whitespace from `text`
-fn remove_spaces(text: &mut String) {
+pub fn remove_spaces(text: &mut String) {
     text.retain(|c| !c.is_whitespace());
 }
 
@@ -502,9 +524,10 @@ mod tests {
 
     #[test]
     fn uri_full_parse() {
-        let uri = "abc://username:password@example.com:123/path/data?key=value&key2=value2#fragid1"
-            .parse::<Uri>()
-            .unwrap();
+        let uri = Uri::try_from(
+            "abc://username:password@example.com:123/path/data?key=value&key2=value2#fragid1",
+        )
+        .unwrap();
         assert_eq!(uri.scheme(), "abc");
 
         assert_eq!(uri.user_info(), Some("username:password"));
@@ -519,7 +542,7 @@ mod tests {
     #[test]
     fn uri_parse() {
         for uri in TEST_URIS.iter() {
-            uri.parse::<Uri>().unwrap();
+            Uri::try_from(*uri).unwrap();
         }
     }
 
@@ -527,7 +550,7 @@ mod tests {
     fn uri_scheme() {
         let uris: Vec<_> = TEST_URIS
             .iter()
-            .map(|uri| uri.parse::<Uri>().unwrap())
+            .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
         assert_eq!(uris[0].scheme(), "https");
@@ -541,7 +564,7 @@ mod tests {
     fn uri_uesr_info() {
         let uris: Vec<_> = TEST_URIS
             .iter()
-            .map(|uri| uri.parse::<Uri>().unwrap())
+            .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
         assert_eq!(uris[0].user_info(), Some("user:info"));
@@ -555,7 +578,7 @@ mod tests {
     fn uri_host() {
         let uris: Vec<_> = TEST_URIS
             .iter()
-            .map(|uri| uri.parse::<Uri>().unwrap())
+            .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
         assert_eq!(uris[0].host(), Some("foo.com"));
@@ -567,12 +590,11 @@ mod tests {
 
     #[test]
     fn uri_host_header() {
-        let uri_def: Uri = "https://en.wikipedia.org:443/wiki/Hypertext_Transfer_Protocol"
-            .parse()
-            .unwrap();
+        let uri_def: Uri =
+            Uri::try_from("https://en.wikipedia.org:443/wiki/Hypertext_Transfer_Protocol").unwrap();
         let uris: Vec<_> = TEST_URIS
             .iter()
-            .map(|uri| uri.parse::<Uri>().unwrap())
+            .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
         assert_eq!(uris[0].host_header(), Some("foo.com:12".to_string()));
@@ -584,7 +606,7 @@ mod tests {
     fn uri_port() {
         let uris: Vec<_> = TEST_URIS
             .iter()
-            .map(|uri| uri.parse::<Uri>().unwrap())
+            .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
         assert_eq!(uris[0].port(), Some(12));
@@ -599,7 +621,7 @@ mod tests {
     fn uri_corr_port() {
         let uris: Vec<_> = TEST_URIS
             .iter()
-            .map(|uri| uri.parse::<Uri>().unwrap())
+            .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
         assert_eq!(uris[0].corr_port(), 12);
@@ -613,7 +635,7 @@ mod tests {
     fn uri_path() {
         let uris: Vec<_> = TEST_URIS
             .iter()
-            .map(|uri| uri.parse::<Uri>().unwrap())
+            .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
         assert_eq!(uris[0].path(), Some("/bar/baz"));
@@ -630,7 +652,7 @@ mod tests {
     fn uri_query() {
         let uris: Vec<_> = TEST_URIS
             .iter()
-            .map(|uri| uri.parse::<Uri>().unwrap())
+            .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
         assert_eq!(uris[0].query(), Some("query"));
@@ -644,7 +666,7 @@ mod tests {
     fn uri_fragment() {
         let uris: Vec<_> = TEST_URIS
             .iter()
-            .map(|uri| uri.parse::<Uri>().unwrap())
+            .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
         assert_eq!(uris[0].fragment(), Some("fragment"));
@@ -658,7 +680,7 @@ mod tests {
     fn uri_resource() {
         let uris: Vec<_> = TEST_URIS
             .iter()
-            .map(|uri| uri.parse::<Uri>().unwrap())
+            .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
         assert_eq!(uris[0].resource(), "/bar/baz?query#fragment");
@@ -672,7 +694,7 @@ mod tests {
     fn uri_display() {
         let uris: Vec<_> = TEST_URIS
             .iter()
-            .map(|uri| uri.parse::<Uri>().unwrap())
+            .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
         assert_eq!(
@@ -690,7 +712,7 @@ mod tests {
     fn authority_username() {
         let auths: Vec<_> = TEST_AUTH
             .iter()
-            .map(|auth| auth.parse::<Authority>().unwrap())
+            .map(|auth| Authority::try_from(*auth).unwrap())
             .collect();
 
         assert_eq!(auths[0].username(), Some("user"));
@@ -703,7 +725,7 @@ mod tests {
     fn authority_password() {
         let auths: Vec<_> = TEST_AUTH
             .iter()
-            .map(|auth| auth.parse::<Authority>().unwrap())
+            .map(|auth| Authority::try_from(*auth).unwrap())
             .collect();
 
         assert_eq!(auths[0].password(), Some("info"));
@@ -716,7 +738,7 @@ mod tests {
     fn authority_host() {
         let auths: Vec<_> = TEST_AUTH
             .iter()
-            .map(|auth| auth.parse::<Authority>().unwrap())
+            .map(|auth| Authority::try_from(*auth).unwrap())
             .collect();
 
         assert_eq!(auths[0].host(), "foo.com");
@@ -729,7 +751,7 @@ mod tests {
     fn authority_port() {
         let auths: Vec<_> = TEST_AUTH
             .iter()
-            .map(|auth| auth.parse::<Authority>().unwrap())
+            .map(|auth| Authority::try_from(*auth).unwrap())
             .collect();
 
         assert_eq!(auths[0].port(), Some(12));
@@ -741,7 +763,7 @@ mod tests {
     #[test]
     fn authority_from_str() {
         for auth in TEST_AUTH.iter() {
-            auth.parse::<Authority>().unwrap();
+            Authority::try_from(*auth).unwrap();
         }
     }
 
@@ -749,7 +771,7 @@ mod tests {
     fn authority_display() {
         let auths: Vec<_> = TEST_AUTH
             .iter()
-            .map(|auth| auth.parse::<Authority>().unwrap())
+            .map(|auth| Authority::try_from(*auth).unwrap())
             .collect();
 
         assert_eq!("user:****@foo.com:12", auths[0].to_string());

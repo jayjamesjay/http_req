@@ -92,7 +92,7 @@ impl Response {
     ///let response = Response::try_from(RESPONSE, &mut body).unwrap();
     ///assert_eq!(response.status_code(), StatusCode::new(200));
     ///```
-    pub fn status_code(&self) -> StatusCode {
+    pub const fn status_code(&self) -> StatusCode {
         self.status.code
     }
 
@@ -186,6 +186,12 @@ pub struct Status {
     version: String,
     code: StatusCode,
     reason: String,
+}
+
+impl Status {
+    pub fn new(version: &str, code: StatusCode, reason: &str) -> Status {
+        Status::from((version, code, reason))
+    }
 }
 
 impl<T, U, V> From<(T, U, V)> for Status
@@ -325,8 +331,9 @@ impl Headers {
     ///# Examples
     ///```
     ///use http_req::{response::Headers, uri::Uri};
+    ///use std::convert::TryFrom;
     ///
-    ///let uri: Uri = "https://www.rust-lang.org/learn".parse().unwrap();
+    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///let headers = Headers::default_http(&uri);
     ///```
     pub fn default_http(uri: &Uri) -> Headers {
@@ -419,7 +426,7 @@ impl StatusCode {
     ///const code: StatusCode = StatusCode::new(101);
     ///assert!(code.is_info())
     ///```
-    pub fn is_info(self) -> bool {
+    pub const fn is_info(self) -> bool {
         self.0 >= 100 && self.0 < 200
     }
 
@@ -432,7 +439,7 @@ impl StatusCode {
     ///const code: StatusCode = StatusCode::new(204);
     ///assert!(code.is_success())
     ///```
-    pub fn is_success(self) -> bool {
+    pub const fn is_success(self) -> bool {
         self.0 >= 200 && self.0 < 300
     }
 
@@ -445,7 +452,7 @@ impl StatusCode {
     ///const code: StatusCode = StatusCode::new(301);
     ///assert!(code.is_redirect())
     ///```
-    pub fn is_redirect(self) -> bool {
+    pub const fn is_redirect(self) -> bool {
         self.0 >= 300 && self.0 < 400
     }
 
@@ -458,7 +465,7 @@ impl StatusCode {
     ///const code: StatusCode = StatusCode::new(400);
     ///assert!(code.is_client_err())
     ///```
-    pub fn is_client_err(self) -> bool {
+    pub const fn is_client_err(self) -> bool {
         self.0 >= 400 && self.0 < 500
     }
 
@@ -471,7 +478,7 @@ impl StatusCode {
     ///const code: StatusCode = StatusCode::new(503);
     ///assert!(code.is_server_err())
     ///```
-    pub fn is_server_err(self) -> bool {
+    pub const fn is_server_err(self) -> bool {
         self.0 >= 500 && self.0 < 600
     }
 
@@ -497,7 +504,7 @@ impl StatusCode {
     ///const code: StatusCode = StatusCode::new(200);
     ///assert_eq!(code.reason(), Some("OK"))
     ///```
-    pub fn reason(self) -> Option<&'static str> {
+    pub const fn reason(self) -> Option<&'static str> {
         let reason = match self.0 {
             100 => "Continue",
             101 => "Switching Protocols",
@@ -615,6 +622,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::TryFrom;
 
     const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
                                          Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
@@ -787,9 +795,7 @@ mod tests {
 
     #[test]
     fn headers_default_http() {
-        let uri = "http://doc.rust-lang.org/std/string/index.html"
-            .parse()
-            .unwrap();
+        let uri = Uri::try_from("http://doc.rust-lang.org/std/string/index.html").unwrap();
 
         let mut headers = Headers::with_capacity(4);
         headers.insert("Host", "doc.rust-lang.org");
