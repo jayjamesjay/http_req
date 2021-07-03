@@ -32,6 +32,3 @@ optional = true
 [dependencies.webpki-roots]
 version = "^0.22"
 optional = true
-
-[badges]
-travis-ci = { repository = "jayjamesjay/http_req"}
