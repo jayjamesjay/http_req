@@ -1,6 +1,6 @@
 [package]
 name = "http_req"
-version = "0.8.0"
+version = "0.8.1"
 license = "MIT"
 description = "simple and lightweight HTTP client with built-in HTTPS support"
 repository = "https://github.com/jayjamesjay/http_req"
@@ -26,9 +26,9 @@ version = "^0.19"
 optional = true
 
 [dependencies.webpki]
-version = "^0.22"
+version = "^0.21"
 optional = true
 
 [dependencies.webpki-roots]
-version = "^0.22"
+version = "^0.21"
 optional = true
