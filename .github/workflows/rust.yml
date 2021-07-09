@@ -12,6 +12,6 @@ jobs:
     - name: Build
       run: cargo build --verbose
     - name: Build with Rusttls
-      run: cargo build --verbose --features rusttls
+      run: cargo build --verbose --no-default-features --features rust-tls
     - name: Run tests
       run: cargo test --verbose
