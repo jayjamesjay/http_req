@@ -2,17 +2,20 @@
 use crate::{
     error,
     response::{find_slice, Headers, Response, CR_LF_2},
-    tls,
     uri::Uri,
 };
 use std::{
     convert::TryFrom,
     fmt,
     io::{self, ErrorKind, Read, Write},
-    net::{TcpStream, ToSocketAddrs},
     path::Path,
     time::{Duration, Instant},
 };
+
+#[cfg(feature = "std")]
+use std::net::{Shutdown, TcpStream};
+#[cfg(not(feature = "std"))]
+use w13e_wasi_socket::{Shutdown, TcpStream};
 
 const CR_LF: &str = "\r\n";
 const BUF_SIZE: usize = 8 * 1024;
@@ -559,7 +562,7 @@ impl<'a> RequestBuilder<'a> {
         let headers: String = self
             .headers
             .iter()
-            .map(|(k, v)| format!("{}: {}{}", k, v, CR_LF))
+            .map(|(k, v)| format!("{}: {}{}", k.as_ref(), v, CR_LF))
             .collect();
 
         let mut request_msg = (request_line + &headers + CR_LF).as_bytes().to_vec();
@@ -887,57 +890,14 @@ impl<'a> Request<'a> {
     pub fn send<T: Write>(&self, writer: &mut T) -> Result<Response, error::Error> {
         let host = self.inner.uri.host().unwrap_or("");
         let port = self.inner.uri.corr_port();
-        let mut stream = match self.connect_timeout {
-            Some(timeout) => connect_timeout(host, port, timeout)?,
-            None => TcpStream::connect((host, port))?,
-        };
-
-        stream.set_read_timeout(self.read_timeout)?;
-        stream.set_write_timeout(self.write_timeout)?;
+        let mut stream = TcpStream::connect((host, port))?;
 
         if self.inner.uri.scheme() == "https" {
-            let mut cnf = tls::Config::default();
-            let cnf = match self.root_cert_file_pem {
-                Some(p) => cnf.add_root_cert_file_pem(p)?,
-                None => &mut cnf,
-            };
-            let mut stream = cnf.connect(host, stream)?;
-            self.inner.send(&mut stream, writer)
+            return Err(error::Error::Tls)
         } else {
             self.inner.send(&mut stream, writer)
         }
     }
-}
-
-///Connects to target host with a timeout
-pub fn connect_timeout<T, U>(host: T, port: u16, timeout: U) -> io::Result<TcpStream>
-where
-    Duration: From<U>,
-    T: AsRef<str>,
-{
-    let host = host.as_ref();
-    let timeout = Duration::from(timeout);
-    let addrs: Vec<_> = (host, port).to_socket_addrs()?.collect();
-    let count = addrs.len();
-
-    for (idx, addr) in addrs.into_iter().enumerate() {
-        match TcpStream::connect_timeout(&addr, timeout) {
-            Ok(stream) => return Ok(stream),
-            Err(err) => match err.kind() {
-                io::ErrorKind::TimedOut => return Err(err),
-                _ => {
-                    if idx + 1 == count {
-                        return Err(err);
-                    }
-                }
-            },
-        };
-    }
-
-    Err(io::Error::new(
-        io::ErrorKind::AddrNotAvailable,
-        format!("Could not resolve address for {:?}", host),
-    ))
 }
 
 ///Creates and sends GET request. Returns response for this request.

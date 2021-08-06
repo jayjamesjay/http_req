@@ -3,32 +3,13 @@ name = "http_req"
 version = "0.8.1"
 license = "MIT"
 description = "simple and lightweight HTTP client with built-in HTTPS support"
-repository = "https://github.com/jayjamesjay/http_req"
-authors = ["jayjamesjay"]
+repository = "https://github.com/L-jasmine/http_req"
+authors = ["chensiheng"]
 readme = "README.md"
-categories = ["web-programming::http-client", "network-programming"]
+categories = ["web-programming::http-client", "network-programming","wasmedge","wasi"]
 keywords = ["http", "client", "request"]
 edition = "2018"
 
 [dependencies]
 unicase = "^2.6"
-
-[features]
-default = ["native-tls"]
-rust-tls = ["rustls", "webpki", "webpki-roots"]
-
-[dependencies.native-tls]
-version = "^0.2"
-optional = true
-
-[dependencies.rustls]
-version = "^0.19"
-optional = true
-
-[dependencies.webpki]
-version = "^0.21"
-optional = true
-
-[dependencies.webpki-roots]
-version = "^0.21"
-optional = true
+w13e_wasi_socket = { git = "https://github.com/L-jasmine/wasmedge_wasi_socket", branch = "fix/tcp_write" }

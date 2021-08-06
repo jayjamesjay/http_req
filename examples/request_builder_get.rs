@@ -1,6 +1,12 @@
 use http_req::{request::RequestBuilder, tls, uri::Uri};
 use std::{convert::TryFrom, net::TcpStream};
 
+#[cfg(not(tls))]
+fn main(){
+    unimplemented!()
+}
+
+#[cfg(tls)]
 fn main() {
     //Parse uri and assign it to variable `addr`
     let addr: Uri = Uri::try_from("https://doc.rust-lang.org/").unwrap();
