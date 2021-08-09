@@ -12,4 +12,4 @@ edition = "2018"
 
 [dependencies]
 unicase = "^2.6"
-w13e_wasi_socket = { git = "https://github.com/L-jasmine/wasmedge_wasi_socket", branch = "fix/tcp_write" }
+wasmedge_wasi_socket = { git = "https://github.com/second-state/wasmedge_wasi_socket", branch = "main" }

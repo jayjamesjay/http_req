@@ -7,7 +7,7 @@ name = "http_req"
 version = "0.8.1"
 dependencies = [
  "unicase",
- "w13e_wasi_socket",
+ "wasmedge_wasi_socket",
 ]
 
 [[package]]
@@ -32,9 +32,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5a972e5669d67ba988ce3dc826706fb0a8b01471c088cb0b6110b805cc36aed"
 
 [[package]]
-name = "w13e_wasi_socket"
+name = "wasmedge_wasi_socket"
 version = "0.1.0"
-source = "git+https://github.com/L-jasmine/wasmedge_wasi_socket?branch=fix/tcp_write#acebde70bd6a59d6a921f51d0bba74248647c1e9"
+source = "git+https://github.com/second-state/wasmedge_wasi_socket?branch=main#84e27972035d9ba7dd9fafc319d8c9056d11b204"
 dependencies = [
  "libc",
 ]
