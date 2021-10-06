@@ -1,5 +1,5 @@
 [package]
-name = "http_req"
+name = "wasmedge_http_req"
 version = "0.8.1"
 license = "MIT"
 description = "simple and lightweight HTTP client with built-in HTTPS support"

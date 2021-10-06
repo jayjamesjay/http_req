@@ -1,4 +1,4 @@
-use http_req::{request::RequestBuilder, tls, uri::Uri};
+use wasmedge_http_req::{request::RequestBuilder, tls, uri::Uri};
 use std::{convert::TryFrom, net::TcpStream};
 
 #[cfg(not(tls))]

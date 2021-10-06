@@ -1,4 +1,4 @@
-use http_req::request;
+use wasmedge_http_req::request;
 
 fn main() {
     let res = request::head("https://www.rust-lang.org/learn").unwrap();
