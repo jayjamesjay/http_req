@@ -1,14 +1,15 @@
-# http_req
-[![Rust](https://github.com/jayjamesjay/http_req/actions/workflows/rust.yml/badge.svg)](https://github.com/jayjamesjay/http_req/actions/workflows/rust.yml)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.8.1-orange.svg?longCache=true)](https://crates.io/crates/http_req)
-[![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.7.2/http_req/)
+# wasmedge_http_req
 
-Simple and lightweight HTTP client with `[w13e_wasi_socket]`.
+Simple and lightweight HTTP client for the low level [wasmedge_wasi_socket](https://github.com/second-state/wasmedge_wasi_socket) library. It is to be compiled into WebAssembly bytecode targets and run on the [WasmEdge Runtime](https://github.com/WasmEdge/WasmEdge).
+
+> This project is forked and derived from the [http_req](https://github.com/jayjamesjay/http_req) project created by [jayjamesjay](https://github.com/jayjamesjay).
 
 ## Example
+
 Basic GET request
+
 ```rust
-use http_req::request;
+use wasmedge_http_req::request;
 
 fn main() {
     let mut writer = Vec::new(); //container for body of a response
@@ -19,10 +20,9 @@ fn main() {
 ```
 
 ## How to use:
+
 ```toml
 [dependencies]
-http_req  = { git = "https://github.com/L-jasmine/http_req" }
+wasmedge_http_req  = "0.8.1"
 ```
 
-## License
-Licensed under [MIT](https://github.com/L-jasmine/http_req/blob/master/LICENSE).

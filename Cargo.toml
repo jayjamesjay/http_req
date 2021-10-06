@@ -6,10 +6,10 @@ description = "HTTP client for the WasmEdge network socket API. Derived from the
 repository = "https://github.com/second-state/wasmedge_http_req"
 authors = ["chensiheng", "jayjamesjay"]
 readme = "README.md"
-categories = ["web-programming::http-client", "network-programming","wasmedge","wasi"]
-keywords = ["http", "client", "request"]
+categories = ["web-programming::http-client", "network-programming"]
+keywords = ["http", "client", "request", "wasmedge", "webassembly"]
 edition = "2018"
 
 [dependencies]
 unicase = "^2.6"
-wasmedge_wasi_socket = { git = "https://github.com/second-state/wasmedge_wasi_socket", branch = "main" }
+wasmedge_wasi_socket = "0.1.0"
