@@ -2,9 +2,9 @@
 name = "wasmedge_http_req"
 version = "0.8.1"
 license = "MIT"
-description = "simple and lightweight HTTP client with built-in HTTPS support"
-repository = "https://github.com/L-jasmine/http_req"
-authors = ["chensiheng"]
+description = "HTTP client for the WasmEdge network socket API. Derived from the http_req library."
+repository = "https://github.com/second-state/wasmedge_http_req"
+authors = ["chensiheng", "jayjamesjay"]
 readme = "README.md"
 categories = ["web-programming::http-client", "network-programming","wasmedge","wasi"]
 keywords = ["http", "client", "request"]
