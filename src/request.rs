@@ -13,9 +13,9 @@ use std::{
 };
 
 #[cfg(feature = "std")]
-use std::net::{Shutdown, TcpStream};
+use std::net::{TcpStream};
 #[cfg(not(feature = "std"))]
-use wasmedge_wasi_socket::{Shutdown, TcpStream};
+use wasmedge_wasi_socket::{TcpStream};
 
 const CR_LF: &str = "\r\n";
 const BUF_SIZE: usize = 8 * 1024;
