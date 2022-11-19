@@ -6,7 +6,6 @@ use crate::{
     uri::Uri,
 };
 use std::{
-    convert::TryFrom,
     fmt,
     io::{self, ErrorKind, Read, Write},
     net::{TcpStream, ToSocketAddrs},
@@ -1103,7 +1102,6 @@ mod tests {
 
         let mut expect_headers = Headers::new();
         expect_headers.insert("Host", "doc.rust-lang.org");
-        expect_headers.insert("Referer", "http://doc.rust-lang.org/std/string/index.html");
         expect_headers.insert(k, v);
 
         let req = req.header(k, v);
@@ -1166,7 +1164,6 @@ mod tests {
         let req = RequestBuilder::new(&uri);
 
         const DEFAULT_MSG: &str = "GET /std/string/index.html HTTP/1.1\r\n\
-                                   Referer: http://doc.rust-lang.org/std/string/index.html\r\n\
                                    Host: doc.rust-lang.org\r\n\r\n";
         let msg = req.parse_msg();
         let msg = String::from_utf8_lossy(&msg).into_owned();
@@ -1219,7 +1216,6 @@ mod tests {
 
         let mut expect_headers = Headers::new();
         expect_headers.insert("Host", "doc.rust-lang.org");
-        expect_headers.insert("Referer", "http://doc.rust-lang.org/std/string/index.html");
         expect_headers.insert("Connection", "Close");
         expect_headers.insert(k, v);
 

@@ -338,9 +338,7 @@ impl Headers {
     ///```
     pub fn default_http(uri: &Uri) -> Headers {
         let mut headers = Headers::with_capacity(4);
-
         headers.insert("Host", &uri.host_header().unwrap_or_default());
-        headers.insert("Referer", &uri);
 
         headers
     }
@@ -799,7 +797,6 @@ mod tests {
 
         let mut headers = Headers::with_capacity(4);
         headers.insert("Host", "doc.rust-lang.org");
-        headers.insert("Referer", "http://doc.rust-lang.org/std/string/index.html");
 
         assert_eq!(Headers::default_http(&uri), headers);
     }

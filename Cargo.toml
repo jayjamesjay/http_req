@@ -1,6 +1,6 @@
 [package]
 name = "http_req"
-version = "0.8.1"
+version = "0.9.0"
 license = "MIT"
 description = "simple and lightweight HTTP client with built-in HTTPS support"
 repository = "https://github.com/jayjamesjay/http_req"
@@ -8,7 +8,7 @@ authors = ["jayjamesjay"]
 readme = "README.md"
 categories = ["web-programming::http-client", "network-programming"]
 keywords = ["http", "client", "request"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 unicase = "^2.6"
@@ -22,13 +22,13 @@ version = "^0.2"
 optional = true
 
 [dependencies.rustls]
-version = "^0.19"
+version = "^0.20"
 optional = true
 
 [dependencies.webpki]
-version = "^0.21"
+version = "^0.22"
 optional = true
 
 [dependencies.webpki-roots]
-version = "^0.21"
+version = "^0.22"
 optional = true
