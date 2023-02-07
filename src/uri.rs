@@ -1,6 +1,7 @@
 //! uri operations
 use crate::error::{Error, ParseErr};
 use std::{
+    borrow::Cow,
     convert::TryFrom,
     fmt,
     ops::{Index, Range},
@@ -228,12 +229,15 @@ impl<'a> Uri<'a> {
     ///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
     ///assert_eq!(uri.resource(), "/bar/baz?query#fragment");
     ///```
-    pub fn resource(&self) -> &str {
-        let mut result = "/";
+    pub fn resource(&self) -> Cow<str> {
+        let mut result = Cow::from(match self.path() {
+            Some(p) => p,
+            None => "/",
+        });
 
-        for v in &[self.path, self.query, self.fragment] {
+        for v in &[self.query, self.fragment] {
             if let Some(r) = v {
-                result = &self.inner[r.start..];
+                result.to_mut().push_str(&self.inner[r.start - 1..]);
                 break;
             }
         }
