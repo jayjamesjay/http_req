@@ -502,12 +502,13 @@ fn get_chunks<'a>(
 mod tests {
     use super::*;
 
-    const TEST_URIS: [&str; 5] = [
+    const TEST_URIS: [&str; 6] = [
         "https://user:info@foo.com:12/bar/baz?query#fragment",
         "file:///C:/Users/User/Pictures/screenshot.png",
         "https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol",
         "mailto:John.Doe@example.com",
         "https://[4b10:bbb0:0:d0::ba7:8001]:443/",
+        "http://website.com/?q=asd",
     ];
 
     const TEST_AUTH: [&str; 4] = [
@@ -692,6 +693,7 @@ mod tests {
         assert_eq!(uris[2].resource(), "/wiki/Hypertext_Transfer_Protocol");
         assert_eq!(uris[3].resource(), "John.Doe@example.com");
         assert_eq!(uris[4].resource(), "/");
+        assert_eq!(uris[5].resource(), "/?q=asd");
     }
 
     #[test]
