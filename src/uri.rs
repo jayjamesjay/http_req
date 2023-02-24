@@ -1,6 +1,7 @@
 //! uri operations
 use crate::error::{Error, ParseErr};
 use std::{
+    borrow::Cow,
     convert::TryFrom,
     fmt,
     ops::{Index, Range},
@@ -228,16 +229,20 @@ impl<'a> Uri<'a> {
     ///let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
     ///assert_eq!(uri.resource(), "/bar/baz?query#fragment");
     ///```
-    pub fn resource(&self) -> &str {
-        let mut result = "/";
-
-        for v in &[self.path, self.query, self.fragment] {
-            if let Some(r) = v {
-                result = &self.inner[r.start..];
-                break;
+    pub fn resource(&self) -> Cow<str> {
+        let result = match self.path {
+            Some(p) => Cow::from(&self.inner[p.start..]),
+            None => {
+                let mut s = Cow::from("/");
+                for v in &[self.query, self.fragment] {
+                    if let Some(r) = v {
+                        s.to_mut().push_str(&self.inner[r.start - 1..]);
+                        break;
+                    }
+                }
+                s
             }
-        }
-
+        };
         result
     }
 }
@@ -498,12 +503,13 @@ fn get_chunks<'a>(
 mod tests {
     use super::*;
 
-    const TEST_URIS: [&str; 5] = [
+    const TEST_URIS: [&str; 6] = [
         "https://user:info@foo.com:12/bar/baz?query#fragment",
         "file:///C:/Users/User/Pictures/screenshot.png",
         "https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol",
         "mailto:John.Doe@example.com",
         "https://[4b10:bbb0:0:d0::ba7:8001]:443/",
+        "http://website.com/?q=asd",
     ];
 
     const TEST_AUTH: [&str; 4] = [
@@ -688,6 +694,7 @@ mod tests {
         assert_eq!(uris[2].resource(), "/wiki/Hypertext_Transfer_Protocol");
         assert_eq!(uris[3].resource(), "John.Doe@example.com");
         assert_eq!(uris[4].resource(), "/");
+        assert_eq!(uris[5].resource(), "/?q=asd");
     }
 
     #[test]
