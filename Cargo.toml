@@ -27,9 +27,9 @@ version = "^0.21"
 optional = true
 
 [dependencies.webpki]
-version = "^0"
+version = "^0.22"
 optional = true
 
 [dependencies.webpki-roots]
-version = "^0"
+version = "^0.25"
 optional = true

@@ -143,11 +143,15 @@ impl Config {
     {
         use rustls::{ClientConnection, StreamOwned};
 
-        let client_config = rustls::ClientConfig::builder().with_safe_defaults().with_root_certificates(self.root_certs.clone()).with_no_client_auth();
+        let client_config = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(self.root_certs.clone())
+            .with_no_client_auth();
         let session = ClientConnection::new(
             std::sync::Arc::new(client_config),
             hostname.as_ref().try_into().map_err(|_| HttpError::Tls)?,
-        ).map_err(|e| ParseErr::Rustls(e))?;
+        )
+        .map_err(|e| ParseErr::Rustls(e))?;
         let stream = StreamOwned::new(session, stream);
 
         Ok(Conn { stream })
