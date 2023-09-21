@@ -23,7 +23,7 @@ pub struct Conn<S: io::Read + io::Write> {
     stream: native_tls::TlsStream<S>,
 
     #[cfg(feature = "rust-tls")]
-    stream: rustls::StreamOwned<rustls::ClientSession, S>,
+    stream: rustls::StreamOwned<rustls::ClientConnection, S>,
 }
 
 impl<S: io::Read + io::Write> io::Read for Conn<S> {
@@ -63,7 +63,7 @@ pub struct Config {
     #[cfg(feature = "native-tls")]
     extra_root_certs: Vec<native_tls::Certificate>,
     #[cfg(feature = "rust-tls")]
-    client_config: std::sync::Arc<rustls::ClientConfig>,
+    root_certs: std::sync::Arc<rustls::RootCertStore>,
 }
 
 impl Default for Config {
@@ -76,13 +76,16 @@ impl Default for Config {
 
     #[cfg(feature = "rust-tls")]
     fn default() -> Self {
-        let mut config = rustls::ClientConfig::new();
-        config
-            .root_store
-            .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
-
+        let mut root_store = rustls::RootCertStore::empty();
+        root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
+            rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
+                ta.subject,
+                ta.spki,
+                ta.name_constraints,
+            )
+        }));
         Config {
-            client_config: std::sync::Arc::new(config),
+            root_certs: std::sync::Arc::new(root_store),
         }
     }
 }
@@ -127,11 +130,8 @@ impl Config {
     pub fn add_root_cert_file_pem(&mut self, file_path: &Path) -> Result<&mut Self, HttpError> {
         let f = File::open(file_path)?;
         let mut f = BufReader::new(f);
-        let config = std::sync::Arc::make_mut(&mut self.client_config);
-        let _ = config
-            .root_store
-            .add_pem_file(&mut f)
-            .map_err(|_| HttpError::from(ParseErr::Invalid))?;
+        let root_certs = std::sync::Arc::make_mut(&mut self.root_certs);
+        root_certs.add_parsable_certificates(&rustls_pemfile::certs(&mut f)?);
         Ok(self)
     }
 
@@ -141,13 +141,13 @@ impl Config {
         H: AsRef<str>,
         S: io::Read + io::Write,
     {
-        use rustls::{ClientSession, StreamOwned};
+        use rustls::{ClientConnection, StreamOwned};
 
-        let session = ClientSession::new(
-            &self.client_config,
-            webpki::DNSNameRef::try_from_ascii_str(hostname.as_ref())
-                .map_err(|_| HttpError::Tls)?,
-        );
+        let client_config = rustls::ClientConfig::builder().with_safe_defaults().with_root_certificates(self.root_certs.clone()).with_no_client_auth();
+        let session = ClientConnection::new(
+            std::sync::Arc::new(client_config),
+            hostname.as_ref().try_into().map_err(|_| HttpError::Tls)?,
+        ).map_err(|e| ParseErr::Rustls(e))?;
         let stream = StreamOwned::new(session, stream);
 
         Ok(Conn { stream })
