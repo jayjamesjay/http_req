@@ -10,6 +10,8 @@ pub enum ParseErr {
     UriErr,
     Invalid,
     Empty,
+    #[cfg(feature = "rust-tls")]
+    Rustls(rustls::Error),
 }
 
 impl error::Error for ParseErr {
@@ -19,6 +21,8 @@ impl error::Error for ParseErr {
         match self {
             Utf8(e) => Some(e),
             Int(e) => Some(e),
+            #[cfg(feature = "rust-tls")]
+            Rustls(e) => Some(e),
             StatusErr | HeadersErr | UriErr | Invalid | Empty => None,
         }
     }
@@ -36,8 +40,17 @@ impl fmt::Display for ParseErr {
             StatusErr => "status line contains invalid values",
             HeadersErr => "headers contain invalid values",
             UriErr => "uri contains invalid characters",
+            #[cfg(feature = "rust-tls")]
+            Rustls(_) => "rustls error",
         };
         write!(f, "ParseErr: {}", err)
+    }
+}
+
+#[cfg(feature = "rust-tls")]
+impl From<rustls::Error> for ParseErr {
+    fn from(e: rustls::Error) -> Self {
+        ParseErr::Rustls(e)
     }
 }
 
