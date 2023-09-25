@@ -21,9 +21,9 @@ impl error::Error for ParseErr {
         match self {
             Utf8(e) => Some(e),
             Int(e) => Some(e),
+            StatusErr | HeadersErr | UriErr | Invalid | Empty => None,
             #[cfg(feature = "rust-tls")]
             Rustls(e) => Some(e),
-            StatusErr | HeadersErr | UriErr | Invalid | Empty => None,
         }
     }
 }

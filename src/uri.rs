@@ -238,16 +238,14 @@ impl<'a> Uri<'a> {
 
 impl<'a> fmt::Display for Uri<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let uri = if let Some(auth) = &self.authority {
-            let mut uri = self.inner.to_string();
+        let mut uri = self.inner.to_string();
+
+        if let Some(auth) = &self.authority {
             let auth = auth.to_string();
             let start = self.scheme.end + 3;
 
             uri.replace_range(start..(start + auth.len()), &auth);
-            uri
-        } else {
-            self.inner.to_string()
-        };
+        }
 
         write!(f, "{}", uri)
     }
@@ -402,8 +400,7 @@ impl<'a> TryFrom<&'a str> for Authority<'a> {
     type Error = ParseErr;
 
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
-        let mut username = None;
-        let mut password = None;
+        let (mut username, mut password) = (None, None);
 
         let uri_part = if s.contains('@') {
             let (info, part) = get_chunks(&s, Some(RangeC::new(0, s.len())), "@");
@@ -440,17 +437,14 @@ impl<'a> TryFrom<&'a str> for Authority<'a> {
 
 impl<'a> fmt::Display for Authority<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let auth = if let Some(pass) = self.password {
+        let mut auth = self.inner.to_string();
+
+        if let Some(pass) = self.password {
             let range = Range::from(pass);
-
             let hidden_pass = "*".repeat(range.len());
-            let mut auth = self.inner.to_string();
-            auth.replace_range(range, &hidden_pass);
 
-            auth
-        } else {
-            self.inner.to_string()
-        };
+            auth.replace_range(range, &hidden_pass);
+        }
 
         write!(f, "{}", auth)
     }
@@ -469,28 +463,24 @@ fn get_chunks<'a>(
     range: Option<RangeC>,
     separator: &'a str,
 ) -> (Option<RangeC>, Option<RangeC>) {
-    if let Some(r) = range {
-        let range = Range::from(r);
+    let (mut before, mut after) = (None, None);
 
-        match s[range.clone()].find(separator) {
+    if let Some(range) = range {
+        match s[range].find(separator) {
             Some(i) => {
-                let mid = r.start + i + separator.len();
-                let before = Some(RangeC::new(r.start, mid - 1)).filter(|r| r.start != r.end);
-                let after = Some(RangeC::new(mid, r.end)).filter(|r| r.start != r.end);
-
-                (before, after)
+                let mid = range.start + i + separator.len();
+                before = Some(RangeC::new(range.start, mid - 1)).filter(|r| r.start != r.end);
+                after = Some(RangeC::new(mid, range.end)).filter(|r| r.start != r.end);
             }
             None => {
                 if !s[range].is_empty() {
-                    (Some(r), None)
-                } else {
-                    (None, None)
+                    before = Some(range);
                 }
             }
         }
-    } else {
-        (None, None)
     }
+
+    (before, after)
 }
 
 #[cfg(test)]
@@ -718,13 +708,13 @@ mod tests {
             .collect();
 
         const RESULT: [&str; 7] = [
-             "/bar/baz?query#fragment",
-             "/C:/Users/User/Pictures/screenshot.png",
+            "/bar/baz?query#fragment",
+            "/C:/Users/User/Pictures/screenshot.png",
             "/wiki/Hypertext_Transfer_Protocol",
-             "John.Doe@example.com",
-             "/",
-             "/?query=val",
-             "/#fragment"
+            "John.Doe@example.com",
+            "/",
+            "/?query=val",
+            "/#fragment",
         ];
 
         for i in 0..RESULT.len() {

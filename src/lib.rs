@@ -7,8 +7,9 @@
 //!use http_req::request;
 //!
 //!fn main() {
-//!    let mut writer = Vec::new(); //container for body of a response
-//!    let res = request::get("https://doc.rust-lang.org/", &mut writer).unwrap();
+//!    //Container for body of a response   
+//!    let mut body = Vec::new();
+//!    let res = request::get("https://doc.rust-lang.org/", &mut body).unwrap();
 //!
 //!    println!("Status: {} {}", res.status_code(), res.reason());
 //!}
