@@ -229,31 +229,23 @@ impl<'a> Uri<'a> {
     ///assert_eq!(uri.resource(), "/bar/baz?query#fragment");
     ///```
     pub fn resource(&self) -> &str {
-        let mut result = "/";
-
-        for v in &[self.path, self.query, self.fragment] {
-            if let Some(r) = v {
-                result = &self.inner[r.start..];
-                break;
-            }
+        match self.path {
+            Some(p) => &self.inner[p.start..],
+            None => "/",
         }
-
-        result
     }
 }
 
 impl<'a> fmt::Display for Uri<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let uri = if let Some(auth) = &self.authority {
-            let mut uri = self.inner.to_string();
+        let mut uri = self.inner.to_string();
+
+        if let Some(auth) = &self.authority {
             let auth = auth.to_string();
             let start = self.scheme.end + 3;
 
             uri.replace_range(start..(start + auth.len()), &auth);
-            uri
-        } else {
-            self.inner.to_string()
-        };
+        }
 
         write!(f, "{}", uri)
     }
@@ -265,30 +257,38 @@ impl<'a> TryFrom<&'a str> for Uri<'a> {
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         let (scheme, mut uri_part) = get_chunks(&s, Some(RangeC::new(0, s.len())), ":");
         let scheme = scheme.ok_or(ParseErr::UriErr)?;
+        let (mut authority, mut query, mut fragment) = (None, None, None);
 
-        let mut authority = None;
-
-        if let Some(u) = &uri_part {
-            if s[*u].contains("//") {
+        if let Some(u) = uri_part {
+            if s[u].contains("//") {
                 let (auth, part) = get_chunks(&s, Some(RangeC::new(u.start + 2, u.end)), "/");
 
-                authority = if let Some(a) = auth {
-                    Some(Authority::try_from(&s[a])?)
-                } else {
-                    None
+                if let Some(a) = auth {
+                    authority = Some(Authority::try_from(&s[a])?)
                 };
 
                 uri_part = part;
             }
         }
 
-        let (mut path, uri_part) = get_chunks(&s, uri_part, "?");
-
-        if authority.is_some() || &s[scheme] == "file" {
-            path = path.map(|p| RangeC::new(p.start - 1, p.end));
+        if let Some(u) = uri_part {
+            if &s[u.start - 1..u.start] == "/" {
+                uri_part = Some(RangeC::new(u.start - 1, u.end));
+            }
         }
 
-        let (query, fragment) = get_chunks(&s, uri_part, "#");
+        let mut path = uri_part;
+
+        if let Some(u) = uri_part {
+            if s[u].contains("?") && s[u].contains("#") {
+                (path, uri_part) = get_chunks(&s, uri_part, "?");
+                (query, fragment) = get_chunks(&s, uri_part, "#");
+            } else if s[u].contains("?") {
+                (path, query) = get_chunks(&s, uri_part, "?");
+            } else if s[u].contains("#") {
+                (path, fragment) = get_chunks(&s, uri_part, "#");
+            }
+        }
 
         Ok(Uri {
             inner: s,
@@ -400,22 +400,18 @@ impl<'a> TryFrom<&'a str> for Authority<'a> {
     type Error = ParseErr;
 
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
-        let mut username = None;
-        let mut password = None;
+        let (mut username, mut password) = (None, None);
 
         let uri_part = if s.contains('@') {
             let (info, part) = get_chunks(&s, Some(RangeC::new(0, s.len())), "@");
-            let (name, pass) = get_chunks(&s, info, ":");
-
-            username = name;
-            password = pass;
+            (username, password) = get_chunks(&s, info, ":");
 
             part
         } else {
             Some(RangeC::new(0, s.len()))
         };
 
-        let split_by = if s.contains(']') && s.contains('[') {
+        let split_by = if s.contains('[') && s.contains(']') {
             "]:"
         } else {
             ":"
@@ -441,17 +437,14 @@ impl<'a> TryFrom<&'a str> for Authority<'a> {
 
 impl<'a> fmt::Display for Authority<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let auth = if let Some(pass) = self.password {
+        let mut auth = self.inner.to_string();
+
+        if let Some(pass) = self.password {
             let range = Range::from(pass);
-
             let hidden_pass = "*".repeat(range.len());
-            let mut auth = self.inner.to_string();
-            auth.replace_range(range, &hidden_pass);
 
-            auth
-        } else {
-            self.inner.to_string()
-        };
+            auth.replace_range(range, &hidden_pass);
+        }
 
         write!(f, "{}", auth)
     }
@@ -470,40 +463,38 @@ fn get_chunks<'a>(
     range: Option<RangeC>,
     separator: &'a str,
 ) -> (Option<RangeC>, Option<RangeC>) {
-    if let Some(r) = range {
-        let range = Range::from(r);
+    let (mut before, mut after) = (None, None);
 
-        match s[range.clone()].find(separator) {
+    if let Some(range) = range {
+        match s[range].find(separator) {
             Some(i) => {
-                let mid = r.start + i + separator.len();
-                let before = Some(RangeC::new(r.start, mid - 1)).filter(|r| r.start != r.end);
-                let after = Some(RangeC::new(mid, r.end)).filter(|r| r.start != r.end);
-
-                (before, after)
+                let mid = range.start + i + separator.len();
+                before = Some(RangeC::new(range.start, mid - 1)).filter(|r| r.start != r.end);
+                after = Some(RangeC::new(mid, range.end)).filter(|r| r.start != r.end);
             }
             None => {
                 if !s[range].is_empty() {
-                    (Some(r), None)
-                } else {
-                    (None, None)
+                    before = Some(range);
                 }
             }
         }
-    } else {
-        (None, None)
     }
+
+    (before, after)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const TEST_URIS: [&str; 5] = [
+    const TEST_URIS: [&str; 7] = [
         "https://user:info@foo.com:12/bar/baz?query#fragment",
         "file:///C:/Users/User/Pictures/screenshot.png",
         "https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol",
         "mailto:John.Doe@example.com",
         "https://[4b10:bbb0:0:d0::ba7:8001]:443/",
+        "http://example.com/?query=val",
+        "https://example.com/#fragment",
     ];
 
     const TEST_AUTH: [&str; 4] = [
@@ -552,12 +543,11 @@ mod tests {
             .iter()
             .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
+        const RESULT: [&str; 7] = ["https", "file", "https", "mailto", "https", "http", "https"];
 
-        assert_eq!(uris[0].scheme(), "https");
-        assert_eq!(uris[1].scheme(), "file");
-        assert_eq!(uris[2].scheme(), "https");
-        assert_eq!(uris[3].scheme(), "mailto");
-        assert_eq!(uris[4].scheme(), "https");
+        for i in 0..RESULT.len() {
+            assert_eq!(uris[i].scheme(), RESULT[i]);
+        }
     }
 
     #[test]
@@ -566,12 +556,11 @@ mod tests {
             .iter()
             .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
+        const RESULT: [Option<&str>; 7] = [Some("user:info"), None, None, None, None, None, None];
 
-        assert_eq!(uris[0].user_info(), Some("user:info"));
-        assert_eq!(uris[1].user_info(), None);
-        assert_eq!(uris[2].user_info(), None);
-        assert_eq!(uris[3].user_info(), None);
-        assert_eq!(uris[4].user_info(), None);
+        for i in 0..RESULT.len() {
+            assert_eq!(uris[i].user_info(), RESULT[i]);
+        }
     }
 
     #[test]
@@ -581,11 +570,19 @@ mod tests {
             .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
-        assert_eq!(uris[0].host(), Some("foo.com"));
-        assert_eq!(uris[1].host(), None);
-        assert_eq!(uris[2].host(), Some("en.wikipedia.org"));
-        assert_eq!(uris[3].host(), None);
-        assert_eq!(uris[4].host(), Some("[4b10:bbb0:0:d0::ba7:8001]"));
+        const RESULT: [Option<&str>; 7] = [
+            Some("foo.com"),
+            None,
+            Some("en.wikipedia.org"),
+            None,
+            Some("[4b10:bbb0:0:d0::ba7:8001]"),
+            Some("example.com"),
+            Some("example.com"),
+        ];
+
+        for i in 0..RESULT.len() {
+            assert_eq!(uris[i].host(), RESULT[i]);
+        }
     }
 
     #[test]
@@ -612,7 +609,11 @@ mod tests {
         assert_eq!(uris[0].port(), Some(12));
         assert_eq!(uris[4].port(), Some(443));
 
-        for i in 1..3 {
+        for i in 1..4 {
+            assert_eq!(uris[i].port(), None);
+        }
+
+        for i in 5..7 {
             assert_eq!(uris[i].port(), None);
         }
     }
@@ -624,11 +625,13 @@ mod tests {
             .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
-        assert_eq!(uris[0].corr_port(), 12);
-        assert_eq!(uris[1].corr_port(), HTTP_PORT);
-        assert_eq!(uris[2].corr_port(), HTTPS_PORT);
-        assert_eq!(uris[3].corr_port(), HTTP_PORT);
-        assert_eq!(uris[4].corr_port(), HTTPS_PORT);
+        const RESULT: [u16; 7] = [
+            12, HTTP_PORT, HTTPS_PORT, HTTP_PORT, HTTPS_PORT, HTTP_PORT, HTTPS_PORT,
+        ];
+
+        for i in 0..RESULT.len() {
+            assert_eq!(uris[i].corr_port(), RESULT[i]);
+        }
     }
 
     #[test]
@@ -638,14 +641,19 @@ mod tests {
             .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
-        assert_eq!(uris[0].path(), Some("/bar/baz"));
-        assert_eq!(
-            uris[1].path(),
-            Some("/C:/Users/User/Pictures/screenshot.png")
-        );
-        assert_eq!(uris[2].path(), Some("/wiki/Hypertext_Transfer_Protocol"));
-        assert_eq!(uris[3].path(), Some("John.Doe@example.com"));
-        assert_eq!(uris[4].path(), None);
+        const RESULT: [Option<&str>; 7] = [
+            Some("/bar/baz"),
+            Some("/C:/Users/User/Pictures/screenshot.png"),
+            Some("/wiki/Hypertext_Transfer_Protocol"),
+            Some("John.Doe@example.com"),
+            None,
+            Some("/"),
+            Some("/"),
+        ];
+
+        for i in 0..RESULT.len() {
+            assert_eq!(uris[i].path(), RESULT[i]);
+        }
     }
 
     #[test]
@@ -655,10 +663,18 @@ mod tests {
             .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
-        assert_eq!(uris[0].query(), Some("query"));
+        const RESULT: [Option<&str>; 7] = [
+            Some("query"),
+            None,
+            None,
+            None,
+            None,
+            Some("query=val"),
+            None,
+        ];
 
-        for i in 1..4 {
-            assert_eq!(uris[i].query(), None);
+        for i in 0..RESULT.len() {
+            assert_eq!(uris[i].query(), RESULT[i]);
         }
     }
 
@@ -669,10 +685,18 @@ mod tests {
             .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
-        assert_eq!(uris[0].fragment(), Some("fragment"));
+        const RESULT: [Option<&str>; 7] = [
+            Some("fragment"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("fragment"),
+        ];
 
-        for i in 1..4 {
-            assert_eq!(uris[i].fragment(), None);
+        for i in 0..RESULT.len() {
+            assert_eq!(uris[i].fragment(), RESULT[i]);
         }
     }
 
@@ -683,11 +707,19 @@ mod tests {
             .map(|uri| Uri::try_from(*uri).unwrap())
             .collect();
 
-        assert_eq!(uris[0].resource(), "/bar/baz?query#fragment");
-        assert_eq!(uris[1].resource(), "/C:/Users/User/Pictures/screenshot.png");
-        assert_eq!(uris[2].resource(), "/wiki/Hypertext_Transfer_Protocol");
-        assert_eq!(uris[3].resource(), "John.Doe@example.com");
-        assert_eq!(uris[4].resource(), "/");
+        const RESULT: [&str; 7] = [
+            "/bar/baz?query#fragment",
+            "/C:/Users/User/Pictures/screenshot.png",
+            "/wiki/Hypertext_Transfer_Protocol",
+            "John.Doe@example.com",
+            "/",
+            "/?query=val",
+            "/#fragment",
+        ];
+
+        for i in 0..RESULT.len() {
+            assert_eq!(uris[i].resource(), RESULT[i]);
+        }
     }
 
     #[test]

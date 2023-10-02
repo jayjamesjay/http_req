@@ -2,26 +2,27 @@ use http_req::{request::RequestBuilder, tls, uri::Uri};
 use std::{convert::TryFrom, net::TcpStream};
 
 fn main() {
-    //Parse uri and assign it to variable `addr`
-    let addr: Uri = Uri::try_from("https://doc.rust-lang.org/").unwrap();
+    //Parses a URI and assigns it to a variable `addr`.
+    let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
 
-    //Connect to remote host
+    //Connects to a remote host. Uses information from `addr`.
     let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
 
-    //Open secure connection over TlsStream, because of `addr` (https)
+    //Opens a secure connection over TlsStream. This is required due to use of `https` protocol.
     let mut stream = tls::Config::default()
         .connect(addr.host().unwrap_or(""), stream)
         .unwrap();
 
-    //Container for response's body
+    //Container for a response's body.
     let mut writer = Vec::new();
 
-    //Add header `Connection: Close`
+    //Adds a header `Connection: Close`.
     let response = RequestBuilder::new(&addr)
         .header("Connection", "Close")
         .send(&mut stream, &mut writer)
         .unwrap();
 
     println!("Status: {} {}", response.status_code(), response.reason());
+    println!("Headers: {}", response.headers());
     //println!("{}", String::from_utf8_lossy(&writer));
 }
