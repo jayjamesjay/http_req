@@ -64,28 +64,33 @@ pub struct Config {
     extra_root_certs: Vec<native_tls::Certificate>,
     #[cfg(feature = "rust-tls")]
     root_certs: std::sync::Arc<rustls::RootCertStore>,
+    #[cfg(feature = "rust-tls")]
+    logger: Option<std::sync::Arc<dyn rustls::KeyLog>>,
+    #[cfg(feature = "rust-tls")]
+    server_verifier: Option<std::sync::Arc<dyn rustls::client::ServerCertVerifier>>,
+    #[cfg(feature = "rust-tls")]
+    client_resolver: Option<std::sync::Arc<dyn rustls::client::ResolvesClientCert>>,
 }
 
 impl Default for Config {
     #[cfg(feature = "native-tls")]
     fn default() -> Self {
-        Config {
-            extra_root_certs: vec![],
-        }
+        Config { extra_root_certs: vec![] }
     }
 
     #[cfg(feature = "rust-tls")]
     fn default() -> Self {
         let mut root_store = rustls::RootCertStore::empty();
-        root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-            rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                ta.subject,
-                ta.spki,
-                ta.name_constraints,
-            )
-        }));
+        root_store.add_trust_anchors(
+            webpki_roots::TLS_SERVER_ROOTS
+                .iter()
+                .map(|ta| rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(ta.subject, ta.spki, ta.name_constraints)),
+        );
         Config {
             root_certs: std::sync::Arc::new(root_store),
+            logger: None,
+            server_verifier: None,
+            client_resolver: None,
         }
     }
 }
@@ -127,6 +132,24 @@ impl Config {
     }
 
     #[cfg(feature = "rust-tls")]
+    pub fn set_client_cert_resolver(&mut self, resolver: std::sync::Arc<dyn rustls::client::ResolvesClientCert>) -> &mut Self {
+        self.client_resolver = Some(resolver);
+        self
+    }
+
+    #[cfg(feature = "rust-tls")]
+    pub fn set_server_cert_verifier(&mut self, verifier: std::sync::Arc<dyn rustls::client::ServerCertVerifier>) -> &mut Self {
+        self.server_verifier = Some(verifier);
+        self
+    }
+
+    #[cfg(feature = "rust-tls")]
+    pub fn change_logger(&mut self, new_logger: std::sync::Arc<dyn rustls::KeyLog>) -> &mut Self {
+        self.logger = Some(new_logger);
+        self
+    }
+
+    #[cfg(feature = "rust-tls")]
     pub fn add_root_cert_file_pem(&mut self, file_path: &Path) -> Result<&mut Self, HttpError> {
         let f = File::open(file_path)?;
         let mut f = BufReader::new(f);
@@ -143,15 +166,24 @@ impl Config {
     {
         use rustls::{ClientConnection, StreamOwned};
 
-        let client_config = rustls::ClientConfig::builder()
+        let mut client_config = rustls::ClientConfig::builder()
             .with_safe_defaults()
             .with_root_certificates(self.root_certs.clone())
             .with_no_client_auth();
-        let session = ClientConnection::new(
-            std::sync::Arc::new(client_config),
-            hostname.as_ref().try_into().map_err(|_| HttpError::Tls)?,
-        )
-        .map_err(|e| ParseErr::Rustls(e))?;
+
+        if let Some(logger) = self.logger.clone() {
+            client_config.key_log = logger;
+        }
+
+        if let Some(verifier) = self.server_verifier.clone() {
+            client_config.dangerous().set_certificate_verifier(verifier);
+        }
+
+        if let Some(resolver) = self.client_resolver.clone() {
+            client_config.client_auth_cert_resolver = resolver;
+        }
+
+        let session = ClientConnection::new(std::sync::Arc::new(client_config), hostname.as_ref().try_into().map_err(|_| HttpError::Tls)?).map_err(|e| ParseErr::Rustls(e))?;
         let stream = StreamOwned::new(session, stream);
 
         Ok(Conn { stream })

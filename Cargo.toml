@@ -23,6 +23,7 @@ optional = true
 
 [dependencies.rustls]
 version = "^0.21"
+features = ["dangerous_configuration"]
 optional = true
 
 [dependencies.rustls-pemfile]
