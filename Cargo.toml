@@ -1,6 +1,6 @@
 [package]
 name = "http_req"
-version = "0.10.0"
+version = "0.10.1"
 license = "MIT"
 description = "simple and lightweight HTTP client with built-in HTTPS support"
 repository = "https://github.com/jayjamesjay/http_req"
