@@ -510,10 +510,10 @@ impl<'a> RequestBuilder<'a> {
             let deadline = Instant::now() + timeout;
             copy_with_timeout(stream, writer, deadline)?;
         } else {
-            let num_bytes = res.content_len().unwrap_or(0);
-
-            if num_bytes > 0 {
-                copy_exact(stream, writer, num_bytes - body_part.len())?;
+            if let Some(num_bytes) = res.content_len() {
+                if num_bytes > 0 {
+                    copy_exact(stream, writer, num_bytes - body_part.len())?;
+                }
             } else {
                 io::copy(stream, writer)?;
             }
