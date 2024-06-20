@@ -92,7 +92,7 @@ dependencies = [
 
 [[package]]
 name = "http_req"
-version = "0.10.2"
+version = "0.10.3"
 dependencies = [
  "native-tls",
  "rustls",
