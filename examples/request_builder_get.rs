@@ -14,15 +14,15 @@ fn main() {
         .unwrap();
 
     //Container for a response's body.
-    let mut writer = Vec::new();
+    //let mut writer = Vec::new();
 
     //Adds a header `Connection: Close`.
     let response = RequestBuilder::new(&addr)
-        .header("Connection", "Close")
-        .send(&mut stream, &mut writer)
-        .unwrap();
+        .header("Connection", "Close");
+      //  .send(&mut stream, &mut writer)
+       // .unwrap();
 
-    println!("Status: {} {}", response.status_code(), response.reason());
-    println!("Headers: {}", response.headers());
+    //println!("Status: {} {}", response.status_code(), response.reason());
+    //println!("Headers: {}", response.headers());
     //println!("{}", String::from_utf8_lossy(&writer));
 }
