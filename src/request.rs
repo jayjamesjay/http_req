@@ -3,6 +3,7 @@ use crate::{
     chunked::Reader,
     error,
     response::{find_slice, Headers, Response, CR_LF_2},
+    stream::Stream,
     tls,
     uri::Uri,
 };
@@ -11,10 +12,13 @@ use std::{
     io::{self, ErrorKind, Read, Write},
     net::{TcpStream, ToSocketAddrs},
     path::Path,
-    time::Duration,
+    sync::mpsc,
+    thread,
+    time::{Duration, Instant},
 };
 
 const CR_LF: &str = "\r\n";
+const BUF_SIZE: usize = 8 * 1024;
 const SMALL_BUF_SIZE: usize = 8 * 10;
 
 ///Every iteration increases `count` by one. When `count` is equal to `stop`, `next()`
@@ -770,9 +774,15 @@ impl<'a> Request<'a> {
     pub fn send<T: Write>(&self, writer: &mut T) -> Result<Response, error::Error> {
         let host = self.inner.uri.host().unwrap_or("");
         let port = self.inner.uri.corr_port();
-        let mut stream = match self.connect_timeout {
-            Some(timeout) => connect_timeout(host, port, timeout)?,
-            None => TcpStream::connect((host, port))?,
+        let init_msg = self.inner.parse_msg();
+        let timeout = Duration::from_secs(10);
+
+        let (sender, receiver) = mpsc::channel();
+        let mut raw_response_head: Vec<u8> = Vec::new();
+
+        let mut stream: Stream = match self.connect_timeout {
+            Some(timeout) => Stream::Http(connect_timeout(host, port, timeout)?),
+            None => Stream::Http(TcpStream::connect((host, port))?),
         };
 
         stream.set_read_timeout(self.read_timeout)?;
@@ -784,11 +794,53 @@ impl<'a> Request<'a> {
                 Some(p) => cnf.add_root_cert_file_pem(p)?,
                 None => &mut cnf,
             };
-            let mut stream = cnf.connect(host, stream)?;
-            self.inner.send(&mut stream, writer)
-        } else {
-            self.inner.send(&mut stream, writer)
+
+            if let Stream::Http(inner_stream) = stream {
+                stream = Stream::Https(cnf.connect(host, inner_stream)?);
+            }
         }
+
+        stream.write_all(&init_msg)?;
+
+        thread::spawn(move || loop {
+            let mut buf = [0; BUF_SIZE];
+
+            match stream.read(&mut buf) {
+                Ok(0) => break,
+                Ok(_) => sender.send(buf).unwrap(),
+                Err(_) => break,
+            }
+        });
+
+        let start_time = Instant::now();
+        loop {
+            let now = Instant::now();
+
+            if start_time + timeout > now {
+                let data_read = receiver.recv_timeout(timeout)?;
+
+                if let Some(i) = find_slice(&data_read, &CR_LF_2) {
+                    raw_response_head.write_all(&data_read[..i])?;
+                    writer.write_all(&data_read[i..])?;
+                    break;
+                } else {
+                    raw_response_head.write_all(&data_read)?;
+                }
+            }
+        }
+
+        loop {
+            let now = Instant::now();
+
+            if start_time + timeout > now {
+                match receiver.recv_timeout(timeout) {
+                    Ok(data_read) => writer.write_all(&data_read)?,
+                    Err(_) => break,
+                }
+            }
+        }
+
+        Response::from_head(&raw_response_head)
     }
 }
 

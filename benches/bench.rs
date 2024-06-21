@@ -26,9 +26,7 @@ fn request_send(b: &mut Bencher) {
         let uri = Uri::try_from(URI).unwrap();
         let mut writer = Vec::new();
 
-        let res = Request::new(&uri)
-            .send(&mut writer)
-            .unwrap();
+        let res = Request::new(&uri).send(&mut writer).unwrap();
 
         res
     });

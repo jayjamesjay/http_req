@@ -1,5 +1,5 @@
 //!error system
-use std::{error, fmt, io, num, str};
+use std::{error, fmt, io, num, str, sync::mpsc};
 
 #[derive(Debug, PartialEq)]
 pub enum ParseErr {
@@ -70,6 +70,7 @@ impl From<str::Utf8Error> for ParseErr {
 pub enum Error {
     IO(io::Error),
     Parse(ParseErr),
+    Timeout(mpsc::RecvTimeoutError),
     Tls,
 }
 
@@ -80,6 +81,7 @@ impl error::Error for Error {
         match self {
             IO(e) => Some(e),
             Parse(e) => Some(e),
+            Timeout(e) => Some(e),
             Tls => None,
         }
     }
@@ -92,6 +94,7 @@ impl fmt::Display for Error {
         let err = match self {
             IO(_) => "IO error",
             Tls => "TLS error",
+            Timeout(_) => "Timeout error",
             Parse(err) => return err.fmt(f),
         };
         write!(f, "Error: {}", err)
@@ -127,5 +130,11 @@ impl From<ParseErr> for Error {
 impl From<str::Utf8Error> for Error {
     fn from(e: str::Utf8Error) -> Self {
         Error::Parse(ParseErr::Utf8(e))
+    }
+}
+
+impl From<mpsc::RecvTimeoutError> for Error {
+    fn from(e: mpsc::RecvTimeoutError) -> Self {
+        Error::Timeout(e)
     }
 }
