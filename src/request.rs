@@ -1,13 +1,13 @@
 //! creating and sending HTTP requests
 use crate::{
     error,
-    response::{find_slice, Headers, Response, CR_LF_2},
+    response::{Headers, Response},
     stream::Stream,
     uri::Uri,
 };
 use std::{
     fmt,
-    io::{Read, Write},
+    io::{BufRead, BufReader, Read, Write},
     path::Path,
     sync::mpsc,
     thread,
@@ -15,7 +15,7 @@ use std::{
 };
 
 const CR_LF: &str = "\r\n";
-const BUF_SIZE: usize = 24 * 1024;
+const BUF_SIZE: usize = 1024 * 1024;
 const RECEIVING_TIMEOUT: u64 = 60;
 const DEFAULT_REQ_TIMEOUT: u64 = 12 * 60 * 60;
 
@@ -583,55 +583,92 @@ impl<'a> Request<'a> {
     ///let response = Request::new(&uri).send(&mut writer).unwrap();
     ///```
     pub fn send<T: Write>(&self, writer: &mut T) -> Result<Response, error::Error> {
+        //Set up stream
         let (sender, receiver) = mpsc::channel();
         let mut raw_response_head: Vec<u8> = Vec::new();
-        let init_msg = self.inner.parse_msg();
+        let request_msg = self.inner.parse_msg();
 
         let mut stream = Stream::new(self.inner.uri, self.connect_timeout)?;
         stream.set_read_timeout(self.read_timeout)?;
         stream.set_write_timeout(self.write_timeout)?;
-
         stream = Stream::try_to_https(stream, self.inner.uri, self.root_cert_file_pem)?;
-        stream.write_all(&init_msg)?;
+        stream.write_all(&request_msg)?;
 
-        thread::spawn(move || loop {
-            let mut buf = vec![0; BUF_SIZE];
+        //Read the response
+        let mut buf_reader = BufReader::new(stream);
+        let deadline = Instant::now() + self.timeout;
+        let reciving_timeout = Duration::from_secs(RECEIVING_TIMEOUT);
 
-            match stream.read(&mut buf) {
-                Ok(0) => break,
-                Ok(count) => sender.send(buf[..count].to_owned()).unwrap(),
-                Err(_) => break,
+        thread::spawn(move || {
+            loop {
+                let mut buf = Vec::new();
+                match buf_reader.read_until(0xA, &mut buf) {
+                    Ok(0) => break,
+                    Ok(len) => {
+                        let filled_buf = buf[..len].to_owned();
+                        sender.send(filled_buf).unwrap();
+
+                        if len == 2 && buf == CR_LF.as_bytes() {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+
+            loop {
+                let mut buf = vec![0; BUF_SIZE];
+                match buf_reader.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(len) => {
+                        let filled_buf = buf[..len].to_owned();
+                        sender.send(filled_buf).unwrap();
+                    }
+                    Err(_) => break,
+                }
             }
         });
-
-        let start_time = Instant::now();
-        let reciving_timeout = Duration::from_secs(RECEIVING_TIMEOUT);
-        let mut is_head = true;
 
         loop {
             let now = Instant::now();
 
-            if start_time + self.timeout > now {
+            if deadline > now {
                 let data_read = match receiver.recv_timeout(reciving_timeout) {
                     Ok(data) => data,
                     Err(_) => break,
                 };
 
-                if is_head {
-                    if let Some(i) = find_slice(&data_read, &CR_LF_2) {
-                        raw_response_head.write_all(&data_read[..i])?;
-                        writer.write_all(&data_read[i..])?;
-                        is_head = false;
-                    } else {
-                        raw_response_head.write_all(&data_read)?;
-                    }
-                } else {
+                if data_read == CR_LF.as_bytes() {
+                    break;
+                }
+
+                raw_response_head.write_all(&data_read)?;
+            } else {
+                break;
+            }
+        }
+
+        let response = Response::from_head(&raw_response_head)?;
+        let content_len = response.content_len().unwrap_or(1);
+
+        if content_len > 0 {
+            loop {
+                let now = Instant::now();
+
+                if deadline > now {
+                    let data_read = match receiver.recv_timeout(reciving_timeout) {
+                        Ok(data) => data,
+                        Err(_) => break,
+                    };
+
                     writer.write_all(&data_read)?;
+                } else {
+                    break;
                 }
             }
         }
 
-        Response::from_head(&raw_response_head)
+        Ok(response)
     }
 }
 
