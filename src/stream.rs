@@ -1,8 +1,4 @@
-use crate::{
-    error::Error,
-    tls,
-    uri::Uri,
-};
+use crate::{error::Error, tls, uri::Uri};
 use std::{
     io,
     net::{TcpStream, ToSocketAddrs},
@@ -15,34 +11,11 @@ use crate::tls::Conn;
 pub enum Stream {
     Http(TcpStream),
     Https(Conn<TcpStream>),
+    //Custom(R)
 }
 
 impl Stream {
-    pub fn default(
-        uri: &Uri,
-        connect_timeout: Option<Duration>,
-        read_timeout: Option<Duration>,
-        write_timeout: Option<Duration>,
-        root_cert_file_pem: Option<&Path>,
-    ) -> Result<Stream, Error> {
-        let host = uri.host().unwrap_or("");
-        let port = uri.corr_port();
-        let scheme = uri.scheme();
-
-        let mut stream = new_http(host, port, connect_timeout)?;
-        stream.set_read_timeout(read_timeout)?;
-        stream.set_write_timeout(write_timeout)?;
-
-        if scheme == "https" {
-            if let Stream::Http(inner_stream) = stream {
-                stream = to_https(inner_stream, host, root_cert_file_pem)?;
-            };
-        };
-
-        Ok(stream)
-    }
-
-    /*pub fn new(uri: &Uri, connect_timeout: Option<Duration>) -> Result<Stream, Error> {
+    pub fn new(uri: &Uri, connect_timeout: Option<Duration>) -> Result<Stream, Error> {
         let host = uri.host().unwrap_or("");
         let port = uri.corr_port();
 
@@ -52,7 +25,33 @@ impl Stream {
         };
 
         Ok(Stream::Http(stream))
-    }*/
+    }
+
+    pub fn try_to_https(
+        stream: Stream,
+        uri: &Uri,
+        root_cert_file_pem: Option<&Path>,
+    ) -> Result<Stream, Error> {
+        match stream {
+            Stream::Http(http_stream) => {
+                if uri.scheme() == "https" {
+                    let host = uri.host().unwrap_or("");
+                    let mut cnf = tls::Config::default();
+
+                    let cnf = match root_cert_file_pem {
+                        Some(p) => cnf.add_root_cert_file_pem(p)?,
+                        None => &mut cnf,
+                    };
+
+                    let stream = cnf.connect(host, http_stream)?;
+                    Ok(Stream::Https(stream))
+                } else {
+                    Ok(Stream::Http(http_stream))
+                }
+            }
+            Stream::Https(_) => Ok(stream),
+        }
+    }
 
     pub fn set_read_timeout(&mut self, dur: Option<Duration>) -> Result<(), Error> {
         match self {
@@ -91,31 +90,6 @@ impl io::Write for Stream {
             Stream::Https(stream) => stream.flush(),
         }
     }
-}
-
-pub fn new_http(host: &str, port: u16, connect_timeout: Option<Duration>) -> Result<Stream, Error> {
-    let stream = match connect_timeout {
-        Some(timeout) => connect_with_timeout(host, port, timeout)?,
-        None => TcpStream::connect((host, port))?,
-    };
-
-    Ok(Stream::Http(stream))
-}
-
-pub fn to_https(
-    http_stream: TcpStream,
-    host: &str,
-    root_cert_file_pem: Option<&Path>,
-) -> Result<Stream, Error> {
-    let mut cnf = tls::Config::default();
-
-    let cnf = match root_cert_file_pem {
-        Some(p) => cnf.add_root_cert_file_pem(p)?,
-        None => &mut cnf,
-    };
-
-    let stream = cnf.connect(host, http_stream)?;
-    Ok(Stream::Https(stream))
 }
 
 ///Connects to target host with a timeout

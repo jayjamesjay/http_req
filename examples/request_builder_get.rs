@@ -1,28 +1,44 @@
-use http_req::{request::RequestBuilder, tls, uri::Uri};
-use std::{convert::TryFrom, net::TcpStream};
+use http_req::{
+    request::RequestBuilder,
+    response::{find_slice, Response},
+    stream::Stream,
+    uri::Uri,
+};
+use std::{
+    convert::TryFrom,
+    io::{Read, Write},
+    time::Duration,
+};
 
 fn main() {
     //Parses a URI and assigns it to a variable `addr`.
     let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
 
+    //Prepare a request
+    let mut request_builder = RequestBuilder::new(&addr);
+    request_builder.header("Connection", "Close");
+
+    //Container for a server's response.
+    let mut writer = Vec::new();
+
     //Connects to a remote host. Uses information from `addr`.
-    let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+    let mut stream = Stream::new(&addr, Some(Duration::from_secs(60))).unwrap();
+    stream = Stream::try_to_https(stream, &addr, None).unwrap();
 
-    //Opens a secure connection over TlsStream. This is required due to use of `https` protocol.
-    let mut stream = tls::Config::default()
-        .connect(addr.host().unwrap_or(""), stream)
-        .unwrap();
+    //Generate a request (message) and send it to server.
+    let request_msg = request_builder.parse_msg();
+    stream.write_all(&request_msg).unwrap();
 
-    //Container for a response's body.
-    //let mut writer = Vec::new();
+    //Read response from the server and save it to writer
+    stream.read_to_end(&mut writer).unwrap();
 
-    //Adds a header `Connection: Close`.
-    let response = RequestBuilder::new(&addr)
-        .header("Connection", "Close");
-      //  .send(&mut stream, &mut writer)
-       // .unwrap();
+    //Parse and process response.
+    let pos = find_slice(&writer, &[13, 10, 13, 10].to_owned()).unwrap();
+    let response = Response::from_head(&writer[..pos]).unwrap();
+    let body = writer[pos..].to_vec();
 
-    //println!("Status: {} {}", response.status_code(), response.reason());
-    //println!("Headers: {}", response.headers());
-    //println!("{}", String::from_utf8_lossy(&writer));
+    //Print infromation about the response.
+    println!("Status: {} {}", response.status_code(), response.reason());
+    println!("Headers: {}", response.headers());
+    //println!("{}", String::from_utf8_lossy(&body));
 }
