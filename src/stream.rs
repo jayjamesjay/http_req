@@ -1,17 +1,19 @@
-use crate::{error::Error, tls, uri::Uri};
+use crate::{error::Error, tls, tls::Conn, uri::Uri};
 use std::{
-    io,
+    io::{self, BufRead, Read, Write},
     net::{TcpStream, ToSocketAddrs},
     path::Path,
-    time::Duration,
+    sync::mpsc::{Receiver, Sender},
+    time::{Duration, Instant},
 };
 
-use crate::tls::Conn;
+const CR_LF: &str = "\r\n";
+const BUF_SIZE: usize = 1024 * 1024;
+const RECEIVING_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub enum Stream {
     Http(TcpStream),
     Https(Conn<TcpStream>),
-    //Custom(R)
 }
 
 impl Stream {
@@ -68,7 +70,7 @@ impl Stream {
     }
 }
 
-impl io::Read for Stream {
+impl Read for Stream {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         match self {
             Stream::Http(stream) => stream.read(buf),
@@ -77,7 +79,7 @@ impl io::Read for Stream {
     }
 }
 
-impl io::Write for Stream {
+impl Write for Stream {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         match self {
             Stream::Http(stream) => stream.write(buf),
@@ -89,6 +91,92 @@ impl io::Write for Stream {
             Stream::Http(stream) => stream.flush(),
             Stream::Https(stream) => stream.flush(),
         }
+    }
+}
+
+pub trait ThreadSend {
+    fn read_head(&mut self, sender: &Sender<Vec<u8>>);
+    fn read_body(&mut self, sender: &Sender<Vec<u8>>);
+}
+
+impl<T> ThreadSend for T
+where
+    T: BufRead,
+{
+    fn read_head(&mut self, sender: &Sender<Vec<u8>>) {
+        loop {
+            let mut buf = Vec::new();
+
+            match self.read_until(0xA, &mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(len) => {
+                    let filled_buf = buf[..len].to_owned();
+                    sender.send(filled_buf).unwrap();
+
+                    if len == 2 && buf == CR_LF.as_bytes() {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    fn read_body(&mut self, sender: &Sender<Vec<u8>>) {
+        loop {
+            let mut buf = vec![0; BUF_SIZE];
+
+            match self.read(&mut buf) {
+                Ok(0) | Err(_) => break,
+                Ok(len) => {
+                    let filled_buf = buf[..len].to_owned();
+                    sender.send(filled_buf).unwrap();
+                }
+            }
+        }
+    }
+}
+
+pub trait ThreadReceive {
+    fn write_head(&mut self, receiver: &Receiver<Vec<u8>>, deadline: Instant);
+    fn write_body(&mut self, receiver: &Receiver<Vec<u8>>, deadline: Instant);
+}
+
+impl<T> ThreadReceive for T
+where
+    T: Write,
+{
+    fn write_head(&mut self, receiver: &Receiver<Vec<u8>>, deadline: Instant) {
+        execute_with_deadline(deadline, || {
+            let mut continue_reading = true;
+
+            let data_read = match receiver.recv_timeout(RECEIVING_TIMEOUT) {
+                Ok(data) => data,
+                Err(_) => return false,
+            };
+
+            if data_read == CR_LF.as_bytes() {
+                continue_reading = false;
+            }
+
+            self.write_all(&data_read).unwrap();
+
+            continue_reading
+        });
+    }
+
+    fn write_body(&mut self, receiver: &Receiver<Vec<u8>>, deadline: Instant) {
+        execute_with_deadline(deadline, || {
+            let continue_reading = true;
+
+            let data_read = match receiver.recv_timeout(RECEIVING_TIMEOUT) {
+                Ok(data) => data,
+                Err(_) => return false,
+            };
+
+            self.write_all(&data_read).unwrap();
+
+            continue_reading
+        });
     }
 }
 
@@ -121,4 +209,17 @@ where
         io::ErrorKind::AddrNotAvailable,
         format!("Could not resolve address for {:?}", host),
     ))
+}
+
+pub fn execute_with_deadline<F>(deadline: Instant, mut func: F)
+where
+    F: FnMut() -> bool,
+{
+    loop {
+        let now = Instant::now();
+
+        if deadline < now || func() == false {
+            break;
+        }
+    }
 }

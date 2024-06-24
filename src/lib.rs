@@ -14,11 +14,10 @@
 //!    println!("Status: {} {}", res.status_code(), res.reason());
 //!}
 //!```
-pub mod error;
+pub mod uri;
 pub mod request;
 pub mod response;
 pub mod stream;
+pub mod chunked;
 pub mod tls;
-pub mod uri;
-
-mod chunked;
+pub mod error;

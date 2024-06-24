@@ -226,7 +226,7 @@ impl str::FromStr for Status {
     }
 }
 
-///Wrapper around HashMap<Ascii<String>, String> with additional functionality for parsing HTTP headers
+///Wrapper around `HashMap<Ascii<String>, String>` with additional functionality for parsing HTTP headers
 ///
 ///# Example
 ///```
@@ -272,7 +272,7 @@ impl Headers {
     }
 
     ///An iterator visiting all key-value pairs in arbitrary order.
-    ///The iterator's element type is (&Ascii<String>, &String).
+    ///The iterator's element type is `(&Ascii<String>, &String)`.
     ///
     ///# Examples
     ///```

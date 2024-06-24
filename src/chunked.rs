@@ -1,15 +1,16 @@
-//! module chunked implements the wire protocol for HTTP's "chunked" Transfer-Encoding.
-//! And it's a rust version of the reference implementation in [Go][1].
-//!
-//! [1]: https://golang.google.cn/src/net/http/internal/chunked.go
-//!
+//!implements the wire protocol for HTTP's "chunked" Transfer-Encoding.
+/// 
+///It's a Rust version of the reference implementation in [Go][1].
+///
+///[1]: https://golang.google.cn/src/net/http/internal/chunked.go
+///
 
 use std::io::{self, BufRead, BufReader, Error, ErrorKind, Read};
 
 const MAX_LINE_LENGTH: usize = 4096;
 const CR_LF: [u8; 2] = [b'\r', b'\n'];
 
-pub struct Reader<R> {
+pub struct ChunkReader<R> {
     check_end: bool,
     eof: bool,
     err: Option<Error>,
@@ -17,7 +18,7 @@ pub struct Reader<R> {
     reader: BufReader<R>,
 }
 
-impl<R> Read for Reader<R>
+impl<R> Read for ChunkReader<R>
 where
     R: Read,
 {
@@ -93,7 +94,29 @@ where
     }
 }
 
-impl<R> Reader<R>
+impl<R: Read> BufRead for ChunkReader<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        self.reader.fill_buf()
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.reader.consume(amt)
+    }
+}
+
+impl<R: Read> From<BufReader<R>> for ChunkReader<R> {
+    fn from(value: BufReader<R>) -> Self {
+        ChunkReader {
+            check_end: false,
+            eof: false,
+            err: None,
+            n: 0,
+            reader: value,
+        }
+    }
+}
+
+impl<R> ChunkReader<R>
 where
     R: Read,
 {
@@ -216,7 +239,7 @@ mod tests {
     #[test]
     fn read() {
         let data: &[u8] = b"7\r\nhello, \r\n17\r\nworld! 0123456789abcdef\r\n0\r\n";
-        let mut reader = Reader::new(data);
+        let mut reader = ChunkReader::new(data);
         let mut writer = vec![];
         io::copy(&mut reader, &mut writer).expect("failed to dechunk");
 
@@ -226,7 +249,7 @@ mod tests {
     fn read_multiple() {
         {
             let data: &[u8] = b"3\r\nfoo\r\n3\r\nbar\r\n0\r\n";
-            let mut reader = Reader::new(data);
+            let mut reader = ChunkReader::new(data);
             let mut writer = vec![0u8; 10];
             let n = reader.read(&mut writer).expect("unexpect error");
 
@@ -235,7 +258,7 @@ mod tests {
         }
         {
             let data: &[u8] = b"3\r\nfoo\r\n0\r\n";
-            let mut reader = Reader::new(data);
+            let mut reader = ChunkReader::new(data);
             let mut writer = vec![0u8; 3];
             let n = reader.read(&mut writer).expect("unexpect error");
 
@@ -246,7 +269,7 @@ mod tests {
     #[test]
     fn read_partial() {
         let data: &[u8] = b"7\r\n1234567";
-        let mut reader = Reader::new(data);
+        let mut reader = ChunkReader::new(data);
         let mut writer = vec![];
         io::copy(&mut reader, &mut writer).expect("failed to dechunk");
 
@@ -260,7 +283,7 @@ mod tests {
             + "world! 0123456789abcdef\r\n"
             + "0;someextension=sometoken\r\n";
         let data = data_str.as_bytes();
-        let mut reader = Reader::new(data);
+        let mut reader = ChunkReader::new(data);
         let mut writer = vec![];
 
         reader.read_to_end(&mut writer).expect("failed to dechunk");
