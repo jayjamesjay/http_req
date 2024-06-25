@@ -13,9 +13,9 @@ use unicase::Ascii;
 
 pub(crate) const CR_LF_2: [u8; 4] = [13, 10, 13, 10];
 
-///Represents an HTTP response.
+/// Represents an HTTP response.
 ///
-///It contains `Headers` and `Status` parsed from response.
+/// It contains `Headers` and `Status` parsed from response.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Response {
     status: Status,
@@ -23,19 +23,19 @@ pub struct Response {
 }
 
 impl Response {
-    ///Creates new `Response` with head - status and headers - parsed from a slice of bytes
+    /// Creates new `Response` with head - status and headers - parsed from a slice of bytes
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::Response;
+    /// # Examples
+    /// ```
+    /// use http_req::response::Response;
     ///
-    ///const HEAD: &[u8; 102] = b"HTTP/1.1 200 OK\r\n\
-    ///                         Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
-    ///                         Content-Type: text/html\r\n\
-    ///                         Content-Length: 100\r\n\r\n";
+    /// const HEAD: &[u8; 102] = b"HTTP/1.1 200 OK\r\n\
+    ///                          Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+    ///                          Content-Type: text/html\r\n\
+    ///                          Content-Length: 100\r\n\r\n";
     ///
-    ///let response = Response::from_head(HEAD).unwrap();
-    ///```
+    /// let response = Response::from_head(HEAD).unwrap();
+    /// ```
     pub fn from_head(head: &[u8]) -> Result<Response, Error> {
         let mut head = str::from_utf8(head)?.splitn(2, '\n');
 
@@ -45,21 +45,21 @@ impl Response {
         Ok(Response { status, headers })
     }
 
-    ///Parses `Response` from slice of bytes. Writes it's body to `writer`.
+    /// Parses `Response` from slice of bytes. Writes it's body to `writer`.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::Response;
+    /// # Examples
+    /// ```
+    /// use http_req::response::Response;
     ///
-    ///const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
-    ///                             Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
-    ///                             Content-Type: text/html\r\n\
-    ///                             Content-Length: 100\r\n\r\n\
-    ///                             <html>hello\r\n\r\nhello</html>";
-    ///let mut body = Vec::new();
+    /// const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
+    ///                              Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+    ///                              Content-Type: text/html\r\n\
+    ///                              Content-Length: 100\r\n\r\n\
+    ///                              <html>hello\r\n\r\nhello</html>";
+    /// let mut body = Vec::new();
     ///
-    ///let response = Response::try_from(RESPONSE, &mut body).unwrap();
-    ///```
+    /// let response = Response::try_from(RESPONSE, &mut body).unwrap();
+    /// ```
     pub fn try_from<T: Write>(res: &[u8], writer: &mut T) -> Result<Response, Error> {
         if res.is_empty() {
             Err(Error::Parse(ParseErr::Empty))
@@ -76,103 +76,103 @@ impl Response {
         }
     }
 
-    ///Returns status code of this `Response`.
+    /// Returns status code of this `Response`.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::{Response, StatusCode};
+    /// # Examples
+    /// ```
+    /// use http_req::response::{Response, StatusCode};
     ///
-    ///const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
-    ///                             Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
-    ///                             Content-Type: text/html\r\n\
-    ///                             Content-Length: 100\r\n\r\n\
-    ///                             <html>hello\r\n\r\nhello</html>";
-    ///let mut body = Vec::new();
+    /// const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
+    ///                              Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+    ///                              Content-Type: text/html\r\n\
+    ///                              Content-Length: 100\r\n\r\n\
+    ///                              <html>hello\r\n\r\nhello</html>";
+    /// let mut body = Vec::new();
     ///
-    ///let response = Response::try_from(RESPONSE, &mut body).unwrap();
-    ///assert_eq!(response.status_code(), StatusCode::new(200));
-    ///```
+    /// let response = Response::try_from(RESPONSE, &mut body).unwrap();
+    /// assert_eq!(response.status_code(), StatusCode::new(200));
+    /// ```
     pub const fn status_code(&self) -> StatusCode {
         self.status.code
     }
 
-    ///Returns HTTP version of this `Response`.
+    /// Returns HTTP version of this `Response`.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::Response;
+    /// # Examples
+    /// ```
+    /// use http_req::response::Response;
     ///
-    ///const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
-    ///                             Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
-    ///                             Content-Type: text/html\r\n\
-    ///                             Content-Length: 100\r\n\r\n\
-    ///                             <html>hello\r\n\r\nhello</html>";
-    ///let mut body = Vec::new();
+    /// const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
+    ///                              Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+    ///                              Content-Type: text/html\r\n\
+    ///                              Content-Length: 100\r\n\r\n\
+    ///                              <html>hello\r\n\r\nhello</html>";
+    /// let mut body = Vec::new();
     ///
-    ///let response = Response::try_from(RESPONSE, &mut body).unwrap();
-    ///assert_eq!(response.version(), "HTTP/1.1");
-    ///```
+    /// let response = Response::try_from(RESPONSE, &mut body).unwrap();
+    /// assert_eq!(response.version(), "HTTP/1.1");
+    /// ```
     pub fn version(&self) -> &str {
         &self.status.version
     }
 
-    ///Returns reason of this `Response`.
+    /// Returns reason of this `Response`.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::Response;
+    /// # Examples
+    /// ```
+    /// use http_req::response::Response;
     ///
-    ///const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
-    ///                             Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
-    ///                             Content-Type: text/html\r\n\
-    ///                             Content-Length: 100\r\n\r\n\
-    ///                             <html>hello\r\n\r\nhello</html>";
-    ///let mut body = Vec::new();
+    /// const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
+    ///                              Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+    ///                              Content-Type: text/html\r\n\
+    ///                              Content-Length: 100\r\n\r\n\
+    ///                              <html>hello\r\n\r\nhello</html>";
+    /// let mut body = Vec::new();
     ///
-    ///let response = Response::try_from(RESPONSE, &mut body).unwrap();
-    ///assert_eq!(response.reason(), "OK");
-    ///```
+    /// let response = Response::try_from(RESPONSE, &mut body).unwrap();
+    /// assert_eq!(response.reason(), "OK");
+    /// ```
     pub fn reason(&self) -> &str {
         &self.status.reason
     }
 
-    ///Returns headers of this `Response`.
+    /// Returns headers of this `Response`.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::Response;
+    /// # Examples
+    /// ```
+    /// use http_req::response::Response;
     ///
-    ///const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
-    ///                             Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
-    ///                             Content-Type: text/html\r\n\
-    ///                             Content-Length: 100\r\n\r\n\
-    ///                             <html>hello\r\n\r\nhello</html>";
-    ///let mut body = Vec::new();
+    /// const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
+    ///                              Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+    ///                              Content-Type: text/html\r\n\
+    ///                              Content-Length: 100\r\n\r\n\
+    ///                              <html>hello\r\n\r\nhello</html>";
+    /// let mut body = Vec::new();
     ///
-    ///let response = Response::try_from(RESPONSE, &mut body).unwrap();
-    ///let headers = response.headers();
-    ///```
+    /// let response = Response::try_from(RESPONSE, &mut body).unwrap();
+    /// let headers = response.headers();
+    /// ```
     pub fn headers(&self) -> &Headers {
         &self.headers
     }
 
-    ///Returns length of the content of this `Response` as a `Option`, according to information
-    ///included in headers. If there is no such an information, returns `None`.
+    /// Returns length of the content of this `Response` as a `Option`, according to information
+    /// included in headers. If there is no such an information, returns `None`.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::Response;
+    /// # Examples
+    /// ```
+    /// use http_req::response::Response;
     ///
-    ///const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
-    ///                             Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
-    ///                             Content-Type: text/html\r\n\
-    ///                             Content-Length: 100\r\n\r\n\
-    ///                             <html>hello\r\n\r\nhello</html>";
-    ///let mut body = Vec::new();
+    /// const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
+    ///                              Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+    ///                              Content-Type: text/html\r\n\
+    ///                              Content-Length: 100\r\n\r\n\
+    ///                              <html>hello\r\n\r\nhello</html>";
+    /// let mut body = Vec::new();
     ///
-    ///let response = Response::try_from(RESPONSE, &mut body).unwrap();
-    ///assert_eq!(response.content_len().unwrap(), 100);
-    ///```
+    /// let response = Response::try_from(RESPONSE, &mut body).unwrap();
+    /// assert_eq!(response.content_len().unwrap(), 100);
+    /// ```
     pub fn content_len(&self) -> Option<usize> {
         self.headers()
             .get("Content-Length")
@@ -180,7 +180,7 @@ impl Response {
     }
 }
 
-///Status of HTTP response
+/// Status of HTTP response
 #[derive(PartialEq, Debug, Clone)]
 pub struct Status {
     version: String,
@@ -226,98 +226,98 @@ impl str::FromStr for Status {
     }
 }
 
-///Wrapper around `HashMap<Ascii<String>, String>` with additional functionality for parsing HTTP headers
+/// Wrapper around `HashMap<Ascii<String>, String>` with additional functionality for parsing HTTP headers
 ///
-///# Example
-///```
-///use http_req::response::Headers;
+/// # Example
+/// ```
+/// use http_req::response::Headers;
 ///
-///let mut headers = Headers::new();
-///headers.insert("Connection", "Close");
+/// let mut headers = Headers::new();
+/// headers.insert("Connection", "Close");
 ///
-///assert_eq!(headers.get("Connection"), Some(&"Close".to_string()))
-///```
+/// assert_eq!(headers.get("Connection"), Some(&"Close".to_string()))
+/// ```
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct Headers(HashMap<Ascii<String>, String>);
 
 impl Headers {
-    ///Creates an empty `Headers`.
+    /// Creates an empty `Headers`.
     ///
-    ///The headers are initially created with a capacity of 0, so they will not allocate until
-    ///it is first inserted into.
+    /// The headers are initially created with a capacity of 0, so they will not allocate until
+    /// it is first inserted into.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::Headers;
+    /// # Examples
+    /// ```
+    /// use http_req::response::Headers;
     ///
-    ///let mut headers = Headers::new();
-    ///```
+    /// let mut headers = Headers::new();
+    /// ```
     pub fn new() -> Headers {
         Headers(HashMap::new())
     }
 
-    ///Creates empty `Headers` with the specified capacity.
+    /// Creates empty `Headers` with the specified capacity.
     ///
-    ///The headers will be able to hold at least capacity elements without reallocating.
-    ///If capacity is 0, the headers will not allocate.
+    /// The headers will be able to hold at least capacity elements without reallocating.
+    /// If capacity is 0, the headers will not allocate.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::Headers;
+    /// # Examples
+    /// ```
+    /// use http_req::response::Headers;
     ///
-    ///let mut headers = Headers::with_capacity(200);
-    ///```
+    /// let mut headers = Headers::with_capacity(200);
+    /// ```
     pub fn with_capacity(capacity: usize) -> Headers {
         Headers(HashMap::with_capacity(capacity))
     }
 
-    ///An iterator visiting all key-value pairs in arbitrary order.
-    ///The iterator's element type is `(&Ascii<String>, &String)`.
+    /// An iterator visiting all key-value pairs in arbitrary order.
+    /// The iterator's element type is `(&Ascii<String>, &String)`.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::Headers;
+    /// # Examples
+    /// ```
+    /// use http_req::response::Headers;
     ///
-    ///let mut headers = Headers::new();
-    ///headers.insert("Accept-Charset", "utf-8");
-    ///headers.insert("Accept-Language", "en-US");
-    ///headers.insert("Connection", "Close");
+    /// let mut headers = Headers::new();
+    /// headers.insert("Accept-Charset", "utf-8");
+    /// headers.insert("Accept-Language", "en-US");
+    /// headers.insert("Connection", "Close");
     ///
-    ///let mut iterator = headers.iter();
-    ///```
+    /// let mut iterator = headers.iter();
+    /// ```
     pub fn iter(&self) -> hash_map::Iter<Ascii<String>, String> {
         self.0.iter()
     }
 
-    ///Returns a reference to the value corresponding to the key.
+    /// Returns a reference to the value corresponding to the key.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::Headers;
+    /// # Examples
+    /// ```
+    /// use http_req::response::Headers;
     ///
-    ///let mut headers = Headers::new();
-    ///headers.insert("Accept-Charset", "utf-8");
+    /// let mut headers = Headers::new();
+    /// headers.insert("Accept-Charset", "utf-8");
     ///
-    ///assert_eq!(headers.get("Accept-Charset"), Some(&"utf-8".to_string()))
-    ///```
+    /// assert_eq!(headers.get("Accept-Charset"), Some(&"utf-8".to_string()))
+    /// ```
     pub fn get<T: ToString + ?Sized>(&self, k: &T) -> Option<&std::string::String> {
         self.0.get(&Ascii::new(k.to_string()))
     }
 
-    ///Inserts a key-value pair into the headers.
+    /// Inserts a key-value pair into the headers.
     ///
-    ///If the headers did not have this key present, None is returned.
+    /// If the headers did not have this key present, None is returned.
     ///
-    ///If the headers did have this key present, the value is updated, and the old value is returned.
-    ///The key is not updated, though; this matters for types that can be == without being identical.
+    /// If the headers did have this key present, the value is updated, and the old value is returned.
+    /// The key is not updated, though; this matters for types that can be == without being identical.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::Headers;
+    /// # Examples
+    /// ```
+    /// use http_req::response::Headers;
     ///
-    ///let mut headers = Headers::new();
-    ///headers.insert("Accept-Language", "en-US");
-    ///```
+    /// let mut headers = Headers::new();
+    /// headers.insert("Accept-Language", "en-US");
+    /// ```
     pub fn insert<T, U>(&mut self, key: &T, val: &U) -> Option<String>
     where
         T: ToString + ?Sized,
@@ -326,16 +326,16 @@ impl Headers {
         self.0.insert(Ascii::new(key.to_string()), val.to_string())
     }
 
-    ///Creates default headers for a HTTP request
+    /// Creates default headers for a HTTP request
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{response::Headers, uri::Uri};
-    ///use std::convert::TryFrom;
+    /// # Examples
+    /// ```
+    /// use http_req::{response::Headers, uri::Uri};
+    /// use std::convert::TryFrom;
     ///
-    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
-    ///let headers = Headers::default_http(&uri);
-    ///```
+    /// let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let headers = Headers::default_http(&uri);
+    /// ```
     pub fn default_http(uri: &Uri) -> Headers {
         let mut headers = Headers::with_capacity(4);
         headers.insert("Host", &uri.host_header().unwrap_or_default());
@@ -390,118 +390,118 @@ impl fmt::Display for Headers {
     }
 }
 
-///Code sent by a server in response to a client's request.
+/// Code sent by a server in response to a client's request.
 ///
-///# Example
-///```
-///use http_req::response::StatusCode;
+/// # Example
+/// ```
+/// use http_req::response::StatusCode;
 ///
-///const code: StatusCode = StatusCode::new(200);
-///assert!(code.is_success())
-///```
+/// const code: StatusCode = StatusCode::new(200);
+/// assert!(code.is_success())
+/// ```
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub struct StatusCode(u16);
 
 impl StatusCode {
-    ///Creates new StatusCode from `u16` value.
+    /// Creates new StatusCode from `u16` value.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::StatusCode;
+    /// # Examples
+    /// ```
+    /// use http_req::response::StatusCode;
     ///
-    ///const code: StatusCode = StatusCode::new(200);
-    ///```
+    /// const code: StatusCode = StatusCode::new(200);
+    /// ```
     pub const fn new(code: u16) -> StatusCode {
         StatusCode(code)
     }
 
-    ///Checks if this `StatusCode` is within 100-199, which indicates that it's Informational.
+    /// Checks if this `StatusCode` is within 100-199, which indicates that it's Informational.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::StatusCode;
+    /// # Examples
+    /// ```
+    /// use http_req::response::StatusCode;
     ///
-    ///const code: StatusCode = StatusCode::new(101);
-    ///assert!(code.is_info())
-    ///```
+    /// const code: StatusCode = StatusCode::new(101);
+    /// assert!(code.is_info())
+    /// ```
     pub const fn is_info(self) -> bool {
         self.0 >= 100 && self.0 < 200
     }
 
-    ///Checks if this `StatusCode` is within 200-299, which indicates that it's Successful.
+    /// Checks if this `StatusCode` is within 200-299, which indicates that it's Successful.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::StatusCode;
+    /// # Examples
+    /// ```
+    /// use http_req::response::StatusCode;
     ///
-    ///const code: StatusCode = StatusCode::new(204);
-    ///assert!(code.is_success())
-    ///```
+    /// const code: StatusCode = StatusCode::new(204);
+    /// assert!(code.is_success())
+    /// ```
     pub const fn is_success(self) -> bool {
         self.0 >= 200 && self.0 < 300
     }
 
-    ///Checks if this `StatusCode` is within 300-399, which indicates that it's Redirection.
+    /// Checks if this `StatusCode` is within 300-399, which indicates that it's Redirection.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::StatusCode;
+    /// # Examples
+    /// ```
+    /// use http_req::response::StatusCode;
     ///
-    ///const code: StatusCode = StatusCode::new(301);
-    ///assert!(code.is_redirect())
-    ///```
+    /// const code: StatusCode = StatusCode::new(301);
+    /// assert!(code.is_redirect())
+    /// ```
     pub const fn is_redirect(self) -> bool {
         self.0 >= 300 && self.0 < 400
     }
 
-    ///Checks if this `StatusCode` is within 400-499, which indicates that it's Client Error.
+    /// Checks if this `StatusCode` is within 400-499, which indicates that it's Client Error.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::StatusCode;
+    /// # Examples
+    /// ```
+    /// use http_req::response::StatusCode;
     ///
-    ///const code: StatusCode = StatusCode::new(400);
-    ///assert!(code.is_client_err())
-    ///```
+    /// const code: StatusCode = StatusCode::new(400);
+    /// assert!(code.is_client_err())
+    /// ```
     pub const fn is_client_err(self) -> bool {
         self.0 >= 400 && self.0 < 500
     }
 
-    ///Checks if this `StatusCode` is within 500-599, which indicates that it's Server Error.
+    /// Checks if this `StatusCode` is within 500-599, which indicates that it's Server Error.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::StatusCode;
+    /// # Examples
+    /// ```
+    /// use http_req::response::StatusCode;
     ///
-    ///const code: StatusCode = StatusCode::new(503);
-    ///assert!(code.is_server_err())
-    ///```
+    /// const code: StatusCode = StatusCode::new(503);
+    /// assert!(code.is_server_err())
+    /// ```
     pub const fn is_server_err(self) -> bool {
         self.0 >= 500 && self.0 < 600
     }
 
-    ///Checks this `StatusCode` using closure `f`
+    /// Checks this `StatusCode` using closure `f`
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::StatusCode;
+    /// # Examples
+    /// ```
+    /// use http_req::response::StatusCode;
     ///
-    ///const code: StatusCode = StatusCode::new(203);
-    ///assert!(code.is(|i| i > 199 && i < 250))
-    ///```
+    /// const code: StatusCode = StatusCode::new(203);
+    /// assert!(code.is(|i| i > 199 && i < 250))
+    /// ```
     pub fn is<F: FnOnce(u16) -> bool>(self, f: F) -> bool {
         f(self.0)
     }
 
-    ///Returns `Reason-Phrase` corresponding to this `StatusCode`
+    /// Returns `Reason-Phrase` corresponding to this `StatusCode`
     ///
-    ///# Examples
-    ///```
-    ///use http_req::response::StatusCode;
+    /// # Examples
+    /// ```
+    /// use http_req::response::StatusCode;
     ///
-    ///const code: StatusCode = StatusCode::new(200);
-    ///assert_eq!(code.reason(), Some("OK"))
-    ///```
+    /// const code: StatusCode = StatusCode::new(200);
+    /// assert_eq!(code.reason(), Some("OK"))
+    /// ```
     pub const fn reason(self) -> Option<&'static str> {
         let reason = match self.0 {
             100 => "Continue",
@@ -601,7 +601,7 @@ impl str::FromStr for StatusCode {
     }
 }
 
-///Finds elements slice `e` inside slice `data`. Returns position of the end of first match.
+/// Finds elements slice `e` inside slice `data`. Returns position of the end of first match.
 pub fn find_slice<T>(data: &[T], e: &[T]) -> Option<usize>
 where
     [T]: PartialEq,

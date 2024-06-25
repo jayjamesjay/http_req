@@ -18,7 +18,7 @@ use std::{
 const CR_LF: &str = "\r\n";
 const DEFAULT_REQ_TIMEOUT: u64 = 12 * 60 * 60;
 
-///HTTP request methods
+/// HTTP request methods
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Method {
     GET,
@@ -48,7 +48,7 @@ impl fmt::Display for Method {
     }
 }
 
-///HTTP versions
+/// HTTP versions
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum HttpVersion {
     Http10,
@@ -74,19 +74,19 @@ impl fmt::Display for HttpVersion {
     }
 }
 
-///Raw HTTP request that can be sent to any stream
+/// Raw HTTP request that can be sent to any stream
 ///
-///# Examples
-///```
-///use std::convert::TryFrom;
-///use http_req::{request::RequestBuilder, uri::Uri};
+/// # Examples
+/// ```
+/// use std::convert::TryFrom;
+/// use http_req::{request::RequestBuilder, uri::Uri};
 ///
-///let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+/// let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
 ///
-///let mut request_msg = RequestBuilder::new(&addr)
-///     .header("Connection", "Close")
-///     .parse();
-///```
+/// let mut request_msg = RequestBuilder::new(&addr)
+///      .header("Connection", "Close")
+///      .parse();
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct RequestBuilder<'a> {
     uri: &'a Uri<'a>,
@@ -97,18 +97,18 @@ pub struct RequestBuilder<'a> {
 }
 
 impl<'a> RequestBuilder<'a> {
-    ///Creates new `RequestBuilder` with default parameters
+    /// Creates a new `RequestBuilder` with default parameters
     ///
-    ///# Examples
-    ///```
-    ///use std::convert::TryFrom;
-    ///use http_req::{request::RequestBuilder, uri::Uri};
+    /// # Examples
+    /// ```
+    /// use std::convert::TryFrom;
+    /// use http_req::{request::RequestBuilder, uri::Uri};
     ///
-    ///let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    ///let request_builder = RequestBuilder::new(&addr)
-    ///    .header("Connection", "Close");
-    ///```
+    /// let request_builder = RequestBuilder::new(&addr)
+    ///     .header("Connection", "Close");
+    /// ```
     pub fn new(uri: &'a Uri<'a>) -> RequestBuilder<'a> {
         RequestBuilder {
             headers: Headers::default_http(uri),
@@ -119,18 +119,18 @@ impl<'a> RequestBuilder<'a> {
         }
     }
 
-    ///Sets request method
+    /// Sets the request method
     ///
-    ///# Examples
-    ///```
-    ///use std::convert::TryFrom;
-    ///use http_req::{request::{RequestBuilder, Method}, uri::Uri};
+    /// # Examples
+    /// ```
+    /// use std::convert::TryFrom;
+    /// use http_req::{request::{RequestBuilder, Method}, uri::Uri};
     ///
-    ///let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    ///let request_builder = RequestBuilder::new(&addr)
-    ///    .method(Method::HEAD);
-    ///```
+    /// let request_builder = RequestBuilder::new(&addr)
+    ///     .method(Method::HEAD);
+    /// ```
     pub fn method<T>(&mut self, method: T) -> &mut Self
     where
         Method: From<T>,
@@ -139,18 +139,18 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
-    ///Sets HTTP version
+    /// Sets the HTTP version
     ///
-    ///# Examples
-    ///```
-    ///use std::convert::TryFrom;
-    ///use http_req::{request::{RequestBuilder, HttpVersion}, uri::Uri};
+    /// # Examples
+    /// ```
+    /// use std::convert::TryFrom;
+    /// use http_req::{request::{RequestBuilder, HttpVersion}, uri::Uri};
     ///
-    ///let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    ///let request_builder = RequestBuilder::new(&addr)
-    ///    .version(HttpVersion::Http10);
-    ///```
+    /// let request_builder = RequestBuilder::new(&addr)
+    ///     .version(HttpVersion::Http10);
+    /// ```
     pub fn version<T>(&mut self, version: T) -> &mut Self
     where
         HttpVersion: From<T>,
@@ -159,24 +159,24 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
-    ///Replaces all it's headers with headers passed to the function
+    /// Replaces all it's headers with headers passed to the function
     ///
-    ///# Examples
-    ///```
-    ///use std::convert::TryFrom;
-    ///use http_req::{request::RequestBuilder, response::Headers, uri::Uri};
+    /// # Examples
+    /// ```
+    /// use std::convert::TryFrom;
+    /// use http_req::{request::RequestBuilder, response::Headers, uri::Uri};
     ///
-    ///let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    ///let mut headers = Headers::new();
-    ///headers.insert("Accept-Charset", "utf-8");
-    ///headers.insert("Accept-Language", "en-US");
-    ///headers.insert("Host", "rust-lang.org");
-    ///headers.insert("Connection", "Close");
+    /// let mut headers = Headers::new();
+    /// headers.insert("Accept-Charset", "utf-8");
+    /// headers.insert("Accept-Language", "en-US");
+    /// headers.insert("Host", "rust-lang.org");
+    /// headers.insert("Connection", "Close");
     ///
-    ///let request_builder = RequestBuilder::new(&addr)
-    ///    .headers(headers);
-    ///```
+    /// let request_builder = RequestBuilder::new(&addr)
+    ///     .headers(headers);
+    /// ```
     pub fn headers<T>(&mut self, headers: T) -> &mut Self
     where
         Headers: From<T>,
@@ -185,18 +185,18 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
-    ///Adds new header to existing/default headers
+    /// Adds a new header to existing/default headers
     ///
-    ///# Examples
-    ///```
-    ///use std::convert::TryFrom;
-    ///use http_req::{request::RequestBuilder, response::Headers, uri::Uri};
+    /// # Examples
+    /// ```
+    /// use std::convert::TryFrom;
+    /// use http_req::{request::RequestBuilder, response::Headers, uri::Uri};
     ///
-    ///let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    ///let request_builder = RequestBuilder::new(&addr)
-    ///    .header("Connection", "Close");
-    ///```
+    /// let request_builder = RequestBuilder::new(&addr)
+    ///     .header("Connection", "Close");
+    /// ```
     pub fn header<T, U>(&mut self, key: &T, val: &U) -> &mut Self
     where
         T: ToString + ?Sized,
@@ -206,43 +206,40 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
-    ///Sets body for request
+    /// Sets the body for request
     ///
-    ///# Examples
-    ///```
-    ///use std::convert::TryFrom;
-    ///use http_req::{request::{RequestBuilder, Method}, response::Headers, uri::Uri};
+    /// # Examples
+    /// ```
+    /// use std::convert::TryFrom;
+    /// use http_req::{request::{RequestBuilder, Method}, response::Headers, uri::Uri};
     ///
-    ///let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
-    ///const BODY: &[u8; 27] = b"field1=value1&field2=value2";
+    /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// const BODY: &[u8; 27] = b"field1=value1&field2=value2";
     ///
-    ///let request_builder = RequestBuilder::new(&addr)
-    ///    .method(Method::POST)
-    ///    .body(BODY)
-    ///    .header("Content-Length", &BODY.len())
-    ///    .header("Connection", "Close");
-    ///```
+    /// let request_builder = RequestBuilder::new(&addr)
+    ///     .method(Method::POST)
+    ///     .body(BODY)
+    ///     .header("Content-Length", &BODY.len())
+    ///     .header("Connection", "Close");
+    /// ```
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
         self.body = Some(body);
         self
     }
 
-    ///Parses request message for this `RequestBuilder`
+    /// Parses the request message for this `RequestBuilder`
     ///
-    ///# Examples
-    ///```
-    ///use std::convert::TryFrom;
-    ///use http_req::{request::RequestBuilder, uri::Uri};
+    /// # Examples
+    /// ```
+    /// use std::convert::TryFrom;
+    /// use http_req::{request::RequestBuilder, uri::Uri};
     ///
-    ///let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    ///let mut request_msg = RequestBuilder::new(&addr)
-    ///     .header("Connection", "Close")
-    ///     .parse();
-    ///
-    ///let expected_msg = "GET /learn HTTP/1.1\r\nHost: www.rust-lang.org\r\nConnection: Close\r\n\r\n";
-    ///assert_eq!(String::from_utf8(request_msg).unwrap(), expected_msg);
-    ///```
+    /// let mut request_msg = RequestBuilder::new(&addr)
+    ///      .header("Connection", "Close")
+    ///      .parse();
+    /// ```
     pub fn parse(&self) -> Vec<u8> {
         let request_line = format!(
             "{} {} {}{}",
@@ -268,22 +265,22 @@ impl<'a> RequestBuilder<'a> {
     }
 }
 
-///Allows for making HTTP requests based on specified parameters.
+/// Allows for making HTTP requests based on specified parameters.
 ///
-///It creates stream (`TcpStream` or `TlsStream`) appropriate for the type of uri (`http`/`https`).
-///By default it closes connection after completion of the response.
+/// It creates a stream (`TcpStream` or `TlsStream`) appropriate for the type of uri (`http`/`https`).
+/// By default it closes connection after completion of the response.
 ///
-///# Examples
-///```
-///use http_req::{request::Request, uri::Uri, response::StatusCode};
-///use std::convert::TryFrom;
+/// # Examples
+/// ```
+/// use http_req::{request::Request, uri::Uri, response::StatusCode};
+/// use std::convert::TryFrom;
 ///
-///let mut writer = Vec::new();
-///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+/// let mut writer = Vec::new();
+/// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
 ///
-///let response = Request::new(&uri).send(&mut writer).unwrap();;
-///assert_eq!(response.status_code(), StatusCode::new(200));
-///```
+/// let response = Request::new(&uri).send(&mut writer).unwrap();;
+/// assert_eq!(response.status_code(), StatusCode::new(200));
+/// ```
 ///
 #[derive(Clone, Debug, PartialEq)]
 pub struct Request<'a> {
@@ -296,18 +293,18 @@ pub struct Request<'a> {
 }
 
 impl<'a> Request<'a> {
-    ///Creates new `Request` with default parameters.
+    /// Creates a new `Request` with default parameters.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::Request, uri::Uri};
-    ///use std::convert::TryFrom;
+    /// # Examples
+    /// ```
+    /// use http_req::{request::Request, uri::Uri};
+    /// use std::convert::TryFrom;
     ///
-    ///let mut writer = Vec::new();
-    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let mut writer = Vec::new();
+    /// let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    ///let response = Request::new(&uri).send(&mut writer).unwrap();;
-    ///```
+    /// let response = Request::new(&uri).send(&mut writer).unwrap();;
+    /// ```
     pub fn new(uri: &'a Uri) -> Request<'a> {
         let mut builder = RequestBuilder::new(&uri);
         builder.header("Connection", "Close");
@@ -322,18 +319,18 @@ impl<'a> Request<'a> {
         }
     }
 
-    ///Sets request method.
+    /// Sets the request method.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::{Request, Method}, uri::Uri};
-    ///use std::convert::TryFrom;
+    /// # Examples
+    /// ```
+    /// use http_req::{request::{Request, Method}, uri::Uri};
+    /// use std::convert::TryFrom;
     ///
-    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    ///let response = Request::new(&uri)
-    ///    .method(Method::HEAD);
-    ///```
+    /// let response = Request::new(&uri)
+    ///     .method(Method::HEAD);
+    /// ```
     pub fn method<T>(&mut self, method: T) -> &mut Self
     where
         Method: From<T>,
@@ -342,18 +339,18 @@ impl<'a> Request<'a> {
         self
     }
 
-    ///Sets HTTP version.
+    /// Sets the HTTP version.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::{Request, HttpVersion}, uri::Uri};
-    ///use std::convert::TryFrom;
+    /// # Examples
+    /// ```
+    /// use http_req::{request::{Request, HttpVersion}, uri::Uri};
+    /// use std::convert::TryFrom;
     ///
-    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    ///let response = Request::new(&uri)
-    ///    .version(HttpVersion::Http10);
-    ///```
+    /// let response = Request::new(&uri)
+    ///     .version(HttpVersion::Http10);
+    /// ```
 
     pub fn version<T>(&mut self, version: T) -> &mut Self
     where
@@ -363,24 +360,24 @@ impl<'a> Request<'a> {
         self
     }
 
-    ///Replaces all it's headers with headers passed to the function.
+    /// Replaces all it's headers with headers passed to the function.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::Request, uri::Uri, response::Headers};
-    ///use std::convert::TryFrom;
+    /// # Examples
+    /// ```
+    /// use http_req::{request::Request, uri::Uri, response::Headers};
+    /// use std::convert::TryFrom;
     ///
-    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    ///let mut headers = Headers::new();
-    ///headers.insert("Accept-Charset", "utf-8");
-    ///headers.insert("Accept-Language", "en-US");
-    ///headers.insert("Host", "rust-lang.org");
-    ///headers.insert("Connection", "Close");
+    /// let mut headers = Headers::new();
+    /// headers.insert("Accept-Charset", "utf-8");
+    /// headers.insert("Accept-Language", "en-US");
+    /// headers.insert("Host", "rust-lang.org");
+    /// headers.insert("Connection", "Close");
     ///
-    ///let response = Request::new(&uri)
-    ///    .headers(headers);
-    ///```
+    /// let response = Request::new(&uri)
+    ///     .headers(headers);
+    /// ```
     pub fn headers<T>(&mut self, headers: T) -> &mut Self
     where
         Headers: From<T>,
@@ -389,18 +386,18 @@ impl<'a> Request<'a> {
         self
     }
 
-    ///Adds header to existing/default headers.
+    /// Adds the header to existing/default headers.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::Request, uri::Uri};
-    ///use std::convert::TryFrom;
+    /// # Examples
+    /// ```
+    /// use http_req::{request::Request, uri::Uri};
+    /// use std::convert::TryFrom;
     ///
-    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    ///let response = Request::new(&uri)
-    ///    .header("Accept-Language", "en-US");
-    ///```
+    /// let response = Request::new(&uri)
+    ///     .header("Accept-Language", "en-US");
+    /// ```
     pub fn header<T, U>(&mut self, key: &T, val: &U) -> &mut Self
     where
         T: ToString + ?Sized,
@@ -410,48 +407,48 @@ impl<'a> Request<'a> {
         self
     }
 
-    ///Sets body for request.
+    /// Sets the body for request.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::{Request, Method}, uri::Uri};
-    ///use std::convert::TryFrom;
+    /// # Examples
+    /// ```
+    /// use http_req::{request::{Request, Method}, uri::Uri};
+    /// use std::convert::TryFrom;
     ///
-    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
-    ///const body: &[u8; 27] = b"field1=value1&field2=value2";
+    /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// const body: &[u8; 27] = b"field1=value1&field2=value2";
     ///
-    ///let response = Request::new(&uri)
-    ///    .method(Method::POST)
-    ///    .header("Content-Length", &body.len())
-    ///    .body(body);
-    ///```
+    /// let response = Request::new(&uri)
+    ///     .method(Method::POST)
+    ///     .header("Content-Length", &body.len())
+    ///     .body(body);
+    /// ```
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
         self.inner.body(body);
         self
     }
 
-    ///Sets connect timeout while using internal `TcpStream` instance.
+    /// Sets the connect timeout while using internal `TcpStream` instance.
     ///
-    ///- If there is a timeout, it will be passed to
-    ///  [`TcpStream::connect_timeout`][TcpStream::connect_timeout].
-    ///- If `None` is provided, [`TcpStream::connect`][TcpStream::connect] will
-    ///  be used. A timeout will still be enforced by the operating system, but
-    ///  the exact value depends on the platform.
+    /// - If there is a timeout, it will be passed to
+    ///   [`TcpStream::connect_timeout`][TcpStream::connect_timeout].
+    /// - If `None` is provided, [`TcpStream::connect`][TcpStream::connect] will
+    ///   be used. A timeout will still be enforced by the operating system, but
+    ///   the exact value depends on the platform.
     ///
-    ///[TcpStream::connect]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect
-    ///[TcpStream::connect_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect_timeout
+    /// [TcpStream::connect]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect
+    /// [TcpStream::connect_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.connect_timeout
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::Request, uri::Uri};
-    ///use std::{time::Duration, convert::TryFrom};
+    /// # Examples
+    /// ```
+    /// use http_req::{request::Request, uri::Uri};
+    /// use std::{time::Duration, convert::TryFrom};
     ///
-    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
-    ///const time: Option<Duration> = Some(Duration::from_secs(10));
+    /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// const time: Option<Duration> = Some(Duration::from_secs(10));
     ///
-    ///let response = Request::new(&uri)
-    ///    .connect_timeout(time);
-    ///```
+    /// let response = Request::new(&uri)
+    ///     .connect_timeout(time);
+    /// ```
     pub fn connect_timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
     where
         Duration: From<T>,
@@ -460,24 +457,24 @@ impl<'a> Request<'a> {
         self
     }
 
-    ///Sets read timeout on internal `TcpStream` instance.
+    /// Sets the read timeout on internal `TcpStream` instance.
     ///
-    ///`timeout` will be passed to
-    ///[`TcpStream::set_read_timeout`][TcpStream::set_read_timeout].
+    /// `timeout` will be passed to
+    /// [`TcpStream::set_read_timeout`][TcpStream::set_read_timeout].
     ///
-    ///[TcpStream::set_read_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_read_timeout
+    /// [TcpStream::set_read_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_read_timeout
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::Request, uri::Uri};
-    ///use std::{time::Duration, convert::TryFrom};
+    /// # Examples
+    /// ```
+    /// use http_req::{request::Request, uri::Uri};
+    /// use std::{time::Duration, convert::TryFrom};
     ///
-    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
-    ///const time: Option<Duration> = Some(Duration::from_secs(15));
+    /// let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// const time: Option<Duration> = Some(Duration::from_secs(15));
     ///
-    ///let response = Request::new(&uri)
-    ///    .read_timeout(time);
-    ///```
+    /// let response = Request::new(&uri)
+    ///     .read_timeout(time);
+    /// ```
     pub fn read_timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
     where
         Duration: From<T>,
@@ -486,24 +483,24 @@ impl<'a> Request<'a> {
         self
     }
 
-    ///Sets write timeout on internal `TcpStream` instance.
+    /// Sets the write timeout on internal `TcpStream` instance.
     ///
-    ///`timeout` will be passed to
-    ///[`TcpStream::set_write_timeout`][TcpStream::set_write_timeout].
+    /// `timeout` will be passed to
+    /// [`TcpStream::set_write_timeout`][TcpStream::set_write_timeout].
     ///
-    ///[TcpStream::set_write_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_write_timeout
+    /// [TcpStream::set_write_timeout]: https://doc.rust-lang.org/std/net/struct.TcpStream.html#method.set_write_timeout
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::Request, uri::Uri};
-    ///use std::{time::Duration, convert::TryFrom};
+    /// # Examples
+    /// ```
+    /// use http_req::{request::Request, uri::Uri};
+    /// use std::{time::Duration, convert::TryFrom};
     ///
-    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
-    ///const time: Option<Duration> = Some(Duration::from_secs(5));
+    /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// const time: Option<Duration> = Some(Duration::from_secs(5));
     ///
-    ///let response = Request::new(&uri)
-    ///    .write_timeout(time);
-    ///```
+    /// let response = Request::new(&uri)
+    ///     .write_timeout(time);
+    /// ```
     pub fn write_timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
     where
         Duration: From<T>,
@@ -512,20 +509,20 @@ impl<'a> Request<'a> {
         self
     }
 
-    ///Sets timeout on entire request. 
-    ///Data is read from a stream until the timeout is reached or there is no more data to read.
+    /// Sets the timeout on entire request.
+    /// Data is read from a stream until there is no more data to read or the timeout is exceeded.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::Request, uri::Uri};
-    ///use std::{time::Duration, convert::TryFrom};
+    /// # Examples
+    /// ```
+    /// use http_req::{request::Request, uri::Uri};
+    /// use std::{time::Duration, convert::TryFrom};
     ///
-    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
-    ///const time: Duration = Duration::from_secs(5);
+    /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// const time: Duration = Duration::from_secs(5);
     ///
-    ///let response = Request::new(&uri)
-    ///    .timeout(time);
-    ///```
+    /// let response = Request::new(&uri)
+    ///     .timeout(time);
+    /// ```
     pub fn timeout<T>(&mut self, timeout: T) -> &mut Self
     where
         Duration: From<T>,
@@ -534,50 +531,50 @@ impl<'a> Request<'a> {
         self
     }
 
-    ///Add a file containing the PEM-encoded certificates that should be added in the trusted root store.
+    /// Adds the file containing the PEM-encoded certificates that should be added in the trusted root store.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::Request, uri::Uri};
-    ///use std::{time::Duration, convert::TryFrom, path::Path};
+    /// # Examples
+    /// ```
+    /// use http_req::{request::Request, uri::Uri};
+    /// use std::{time::Duration, convert::TryFrom, path::Path};
     ///
-    ///let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
-    ///let path = Path::new("./foo/bar.txt");
+    /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let path = Path::new("./foo/bar.txt");
     ///
-    ///let response = Request::new(&uri)
-    ///    .root_cert_file_pem(&path);
-    ///```
+    /// let response = Request::new(&uri)
+    ///     .root_cert_file_pem(&path);
+    /// ```
     pub fn root_cert_file_pem(&mut self, file_path: &'a Path) -> &mut Self {
         self.root_cert_file_pem = Some(file_path);
         self
     }
 
-    ///Sends HTTP request and returns `Response`.
+    /// Sends the HTTP request and returns `Response`.
     ///
-    ///Creates `TcpStream` (and wraps it with `TlsStream` if needed). Writes request message
-    ///to created stream. Returns response for this request. Writes response's body to `writer`.
+    /// Creates `TcpStream` (and wraps it with `TlsStream` if needed). Writes request message
+    /// to created stream. Returns response for this request. Writes response's body to `writer`.
     ///
-    ///# Examples
-    ///```
-    ///use http_req::{request::Request, uri::Uri};
-    ///use std::convert::TryFrom;
+    /// # Examples
+    /// ```
+    /// use http_req::{request::Request, uri::Uri};
+    /// use std::convert::TryFrom;
     ///
-    ///let mut writer = Vec::new();
-    ///let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    /// let mut writer = Vec::new();
+    /// let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    ///let response = Request::new(&uri).send(&mut writer).unwrap();
-    ///```
+    /// let response = Request::new(&uri).send(&mut writer).unwrap();
+    /// ```
     pub fn send<T>(&self, writer: &mut T) -> Result<Response, error::Error>
     where
         T: Write,
     {
-        //Set up stream.
+        //Set up a stream.
         let mut stream = Stream::new(self.inner.uri, self.connect_timeout)?;
         stream.set_read_timeout(self.read_timeout)?;
         stream.set_write_timeout(self.write_timeout)?;
         stream = Stream::try_to_https(stream, self.inner.uri, self.root_cert_file_pem)?;
 
-        //Send request message to stream.
+        //Send the request message to stream.
         let request_msg = self.inner.parse();
         stream.write_all(&request_msg)?;
 
@@ -588,23 +585,23 @@ impl<'a> Request<'a> {
         let mut raw_response_head: Vec<u8> = Vec::new();
         let mut buf_reader = BufReader::new(stream);
 
-        //Read from stream and send over data via `sender`.
+        //Read from the stream and send over data via `sender`.
         thread::spawn(move || {
-            buf_reader.read_head(&sender);
+            buf_reader.send_head(&sender);
 
             let params: Vec<&str> = receiver_supp.recv().unwrap();
             if params.contains(&"non-empty") {
                 if params.contains(&"chunked") {
                     let mut buf_reader = ChunkReader::from(buf_reader);
-                    buf_reader.read_body(&sender);
+                    buf_reader.send_all(&sender);
                 } else {
-                    buf_reader.read_body(&sender);
+                    buf_reader.send_all(&sender);
                 }
             }
         });
 
         //Receive and process `head` of the response.
-        raw_response_head.write_head(&receiver, deadline);
+        raw_response_head.receive(&receiver, deadline);
 
         let response = Response::from_head(&raw_response_head)?;
         let content_len = response.content_len().unwrap_or(1);
@@ -625,24 +622,24 @@ impl<'a> Request<'a> {
 
         //Receive and process `body`` of the response.
         if content_len > 0 {
-            writer.write_body(&receiver, deadline);
+            writer.receive_all(&receiver, deadline);
         }
 
         Ok(response)
     }
 }
 
-///Creates and sends GET request. Returns response for this request.
+/// Creates and sends GET request. Returns response for this request.
 ///
-///# Examples
-///```
-///use http_req::request;
+/// # Examples
+/// ```
+/// use http_req::request;
 ///
-///let mut writer = Vec::new();
-///const uri: &str = "https://www.rust-lang.org/learn";
+/// let mut writer = Vec::new();
+/// const uri: &str = "https://www.rust-lang.org/learn";
 ///
-///let response = request::get(uri, &mut writer).unwrap();
-///```
+/// let response = request::get(uri, &mut writer).unwrap();
+/// ```
 pub fn get<T, U>(uri: T, writer: &mut U) -> Result<Response, error::Error>
 where
     T: AsRef<str>,
@@ -652,15 +649,15 @@ where
     Request::new(&uri).send(writer)
 }
 
-///Creates and sends HEAD request. Returns response for this request.
+/// Creates and sends HEAD request. Returns response for this request.
 ///
-///# Examples
-///```
-///use http_req::request;
+/// # Examples
+/// ```
+/// use http_req::request;
 ///
-///const uri: &str = "https://www.rust-lang.org/learn";
-///let response = request::head(uri).unwrap();
-///```
+/// const uri: &str = "https://www.rust-lang.org/learn";
+/// let response = request::head(uri).unwrap();
+/// ```
 pub fn head<T>(uri: T) -> Result<Response, error::Error>
 where
     T: AsRef<str>,
@@ -671,18 +668,18 @@ where
     Request::new(&uri).method(Method::HEAD).send(&mut writer)
 }
 
-///Creates and sends POST request. Returns response for this request.
+/// Creates and sends POST request. Returns response for this request.
 ///
-///# Examples
-///```
-///use http_req::request;
+/// # Examples
+/// ```
+/// use http_req::request;
 ///
-///let mut writer = Vec::new();
-///const uri: &str = "https://www.rust-lang.org/learn";
-///const body: &[u8; 27] = b"field1=value1&field2=value2";
+/// let mut writer = Vec::new();
+/// const uri: &str = "https://www.rust-lang.org/learn";
+/// const body: &[u8; 27] = b"field1=value1&field2=value2";
 ///
-///let response = request::post(uri, body, &mut writer).unwrap();
-///```
+/// let response = request::post(uri, body, &mut writer).unwrap();
+/// ```
 pub fn post<T, U>(uri: T, body: &[u8], writer: &mut U) -> Result<Response, error::Error>
 where
     T: AsRef<str>,
@@ -770,7 +767,7 @@ mod tests {
     }
 
     #[test]
-    fn request_b_parse_msg() {
+    fn request_b_parse() {
         let uri = Uri::try_from(URI).unwrap();
         let req = RequestBuilder::new(&uri);
 

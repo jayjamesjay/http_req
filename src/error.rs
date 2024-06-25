@@ -1,4 +1,4 @@
-//!error system
+//! error system used around the library.
 use std::{error, fmt, io, num, str, sync::mpsc};
 
 #[derive(Debug, PartialEq)]

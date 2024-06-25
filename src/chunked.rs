@@ -1,14 +1,13 @@
-//!implements the wire protocol for HTTP's "chunked" Transfer-Encoding.
-/// 
-///It's a Rust version of the reference implementation in [Go][1].
+//! implements the wire protocol for HTTP's "chunked" Transfer-Encoding.
+use crate::CR_LF;
 ///
-///[1]: https://golang.google.cn/src/net/http/internal/chunked.go
+/// It's a Rust version of the reference implementation in [Go][1].
 ///
-
+/// [1]: https://golang.google.cn/src/net/http/internal/chunked.go
+///
 use std::io::{self, BufRead, BufReader, Error, ErrorKind, Read};
 
 const MAX_LINE_LENGTH: usize = 4096;
-const CR_LF: [u8; 2] = [b'\r', b'\n'];
 
 pub struct ChunkReader<R> {
     check_end: bool,
@@ -37,7 +36,7 @@ where
                 }
 
                 if let Ok(_) = self.reader.read_exact(&mut footer) {
-                    if footer != CR_LF {
+                    if &footer != CR_LF {
                         self.err = Some(error_malformed_chunked_encoding());
                         break;
                     }

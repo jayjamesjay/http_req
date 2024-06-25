@@ -1,4 +1,4 @@
-//!secure connection over TLS
+//! secure connection over TLS
 
 use crate::error::Error as HttpError;
 use std::{
@@ -16,14 +16,30 @@ use crate::error::ParseErr;
 #[cfg(not(any(feature = "native-tls", feature = "rust-tls")))]
 compile_error!("one of the `native-tls` or `rust-tls` features must be enabled");
 
-///wrapper around TLS Stream,
-///depends on selected TLS library
+/// Wrapper around TLS Stream, depends on selected TLS library (`S: io::Read + io::Write`):
+/// - native_tls: `TlsStream<S>`
+/// - rustls: `StreamOwned<ClientConnection, S>`
 pub struct Conn<S: io::Read + io::Write> {
     #[cfg(feature = "native-tls")]
     stream: native_tls::TlsStream<S>,
 
     #[cfg(feature = "rust-tls")]
     stream: rustls::StreamOwned<rustls::ClientConnection, S>,
+}
+
+impl<S> Conn<S>
+where
+    S: io::Read + io::Write,
+{
+    /// Returns a reference to the underlying socket
+    pub fn get_ref(&self) -> &S {
+        self.stream.get_ref()
+    }
+
+    /// Returns a mutable reference to the underlying socket
+    pub fn get_mut(&mut self) -> &mut S {
+        self.stream.get_mut()
+    }
 }
 
 impl<S: io::Read + io::Write> io::Read for Conn<S> {
@@ -58,7 +74,7 @@ impl<S: io::Read + io::Write> io::Write for Conn<S> {
     }
 }
 
-///client configuration
+/// Client configuration for TLS connection.
 pub struct Config {
     #[cfg(feature = "native-tls")]
     extra_root_certs: Vec<native_tls::Certificate>,
@@ -84,6 +100,7 @@ impl Default for Config {
                 ta.name_constraints,
             )
         }));
+
         Config {
             root_certs: std::sync::Arc::new(root_store),
         }
@@ -96,17 +113,20 @@ impl Config {
         let f = File::open(file_path)?;
         let f = BufReader::new(f);
         let mut pem_crt = vec![];
+
         for line in f.lines() {
             let line = line?;
             let is_end_cert = line.contains("-----END");
             pem_crt.append(&mut line.into_bytes());
             pem_crt.push(b'\n');
+
             if is_end_cert {
                 let crt = native_tls::Certificate::from_pem(&pem_crt)?;
                 self.extra_root_certs.push(crt);
                 pem_crt.clear();
             }
         }
+
         Ok(self)
     }
 
@@ -117,9 +137,11 @@ impl Config {
         S: io::Read + io::Write,
     {
         let mut connector_builder = native_tls::TlsConnector::builder();
+
         for crt in self.extra_root_certs.iter() {
             connector_builder.add_root_certificate((*crt).clone());
         }
+
         let connector = connector_builder.build()?;
         let stream = connector.connect(hostname.as_ref(), stream)?;
 
@@ -130,8 +152,10 @@ impl Config {
     pub fn add_root_cert_file_pem(&mut self, file_path: &Path) -> Result<&mut Self, HttpError> {
         let f = File::open(file_path)?;
         let mut f = BufReader::new(f);
+
         let root_certs = std::sync::Arc::make_mut(&mut self.root_certs);
         root_certs.add_parsable_certificates(&rustls_pemfile::certs(&mut f)?);
+
         Ok(self)
     }
 
@@ -147,11 +171,13 @@ impl Config {
             .with_safe_defaults()
             .with_root_certificates(self.root_certs.clone())
             .with_no_client_auth();
+
         let session = ClientConnection::new(
             std::sync::Arc::new(client_config),
             hostname.as_ref().try_into().map_err(|_| HttpError::Tls)?,
         )
         .map_err(|e| ParseErr::Rustls(e))?;
+
         let stream = StreamOwned::new(session, stream);
 
         Ok(Conn { stream })

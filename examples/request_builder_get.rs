@@ -1,7 +1,12 @@
-use http_req::{request::RequestBuilder, response::Response, stream::Stream, uri::Uri};
+use http_req::{
+    request::RequestBuilder,
+    response::Response,
+    stream::{self, Stream},
+    uri::Uri,
+};
 use std::{
     convert::TryFrom,
-    io::{BufRead, BufReader, Read, Write},
+    io::{BufReader, Read, Write},
     time::Duration,
 };
 
@@ -10,15 +15,13 @@ fn main() {
     let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
 
     //Containers for a server's response.
-    let mut raw_head = Vec::new();
+    let raw_head;
     let mut body = Vec::new();
 
     //Prepares a request message.
     let request_msg = RequestBuilder::new(&addr)
         .header("Connection", "Close")
         .parse();
-
-    println!("{:?}", String::from_utf8(request_msg.clone()));
 
     //Connects to a server. Uses information from `addr`.
     let mut stream = Stream::new(&addr, Some(Duration::from_secs(60))).unwrap();
@@ -30,18 +33,7 @@ fn main() {
     //Wraps the stream in BufReader to make it easier to read from it.
     //Reads a response from the server and saves the head to `raw_head`, and the body to `body`.
     let mut stream = BufReader::new(stream);
-    loop {
-        match stream.read_until(0xA, &mut raw_head) {
-            Ok(0) | Err(_) => break,
-            Ok(len) => {
-                let full_len = raw_head.len();
-
-                if len == 2 && &raw_head[full_len - 2..] == b"\r\n" {
-                    break;
-                }
-            }
-        }
-    }
+    raw_head = stream::read_head(&mut stream);
     stream.read_to_end(&mut body).unwrap();
 
     //Parses and processes the response.
