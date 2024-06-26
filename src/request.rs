@@ -16,7 +16,7 @@ use std::{
 };
 
 const CR_LF: &str = "\r\n";
-const DEFAULT_REQ_TIMEOUT: u64 = 12 * 60 * 60;
+const DEFAULT_REQ_TIMEOUT: u64 = 60 * 60;
 
 /// HTTP request methods
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -601,7 +601,7 @@ impl<'a> Request<'a> {
         });
 
         //Receive and process `head` of the response.
-        raw_response_head.receive(&receiver, deadline);
+        raw_response_head.receive(&receiver, deadline)?;
 
         let response = Response::from_head(&raw_response_head)?;
         let content_len = response.content_len().unwrap_or(1);
@@ -622,7 +622,7 @@ impl<'a> Request<'a> {
 
         //Receive and process `body`` of the response.
         if content_len > 0 {
-            writer.receive_all(&receiver, deadline);
+            writer.receive_all(&receiver, deadline)?;
         }
 
         Ok(response)
@@ -875,6 +875,16 @@ mod tests {
     }
 
     #[test]
+    fn request_timeout() {
+        let uri = Uri::try_from(URI).unwrap();
+        let mut request = Request::new(&uri);
+        let timeout = Duration::from_secs(360);
+
+        request.timeout(timeout);
+        assert_eq!(request.timeout, timeout);
+    }
+
+    #[test]
     fn request_send() {
         let mut writer = Vec::new();
         let uri = Uri::try_from(URI).unwrap();
@@ -885,7 +895,7 @@ mod tests {
 
     #[ignore]
     #[test]
-    fn request_get() {
+    fn fn_get() {
         let mut writer = Vec::new();
         let res = get(URI, &mut writer).unwrap();
 
@@ -899,7 +909,7 @@ mod tests {
 
     #[ignore]
     #[test]
-    fn request_head() {
+    fn fn_head() {
         let res = head(URI).unwrap();
         assert_ne!(res.status_code(), UNSUCCESS_CODE);
 
@@ -909,7 +919,7 @@ mod tests {
 
     #[ignore]
     #[test]
-    fn request_post() {
+    fn fn_post() {
         let mut writer = Vec::new();
         let res = post(URI, &BODY, &mut writer).unwrap();
 

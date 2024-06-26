@@ -5,7 +5,7 @@ use std::{
     io::{self, BufRead, Read, Write},
     net::{TcpStream, ToSocketAddrs},
     path::Path,
-    sync::mpsc::{Receiver, Sender},
+    sync::mpsc::{Receiver, RecvTimeoutError, Sender},
     time::{Duration, Instant},
 };
 
@@ -104,6 +104,7 @@ impl Write for Stream {
     }
 }
 
+/// Trait that allows to send data from readers to other threads
 pub trait ThreadSend {
     /// Reads `head` of the response and sends it via `sender`
     fn send_head(&mut self, sender: &Sender<Vec<u8>>);
@@ -136,45 +137,58 @@ where
     }
 }
 
+/// Trait that allows to receive data from receivers
 pub trait ThreadReceive {
     /// Receives data from `receiver` and writes them into this writer.
     /// Fails if `deadline` is exceeded.
-    fn receive(&mut self, receiver: &Receiver<Vec<u8>>, deadline: Instant);
+    fn receive(&mut self, receiver: &Receiver<Vec<u8>>, deadline: Instant) -> Result<(), Error>;
 
     /// Continuosly receives data from `receiver` until there is no more data
     /// or `deadline` is exceeded. Writes received data into this writer.
-    fn receive_all(&mut self, receiver: &Receiver<Vec<u8>>, deadline: Instant);
+    fn receive_all(&mut self, receiver: &Receiver<Vec<u8>>, deadline: Instant)
+        -> Result<(), Error>;
 }
 
 impl<T> ThreadReceive for T
 where
     T: Write,
 {
-    fn receive(&mut self, receiver: &Receiver<Vec<u8>>, deadline: Instant) {
-        execute_with_deadline(deadline, |remaining_time| {
-            let data_read = match receiver.recv_timeout(remaining_time) {
-                Ok(data) => data,
-                Err(_) => return true,
-            };
+    fn receive(&mut self, receiver: &Receiver<Vec<u8>>, deadline: Instant) -> Result<(), Error> {
+        let now = Instant::now();
+        let data_read = receiver.recv_timeout(deadline - now)?;
 
-            self.write_all(&data_read).unwrap();
-            true
-        });
+        Ok(self.write_all(&data_read)?)
     }
 
-    fn receive_all(&mut self, receiver: &Receiver<Vec<u8>>, deadline: Instant) {
+    fn receive_all(
+        &mut self,
+        receiver: &Receiver<Vec<u8>>,
+        deadline: Instant,
+    ) -> Result<(), Error> {
+        let mut result = Ok(());
+
         execute_with_deadline(deadline, |remaining_time| {
-            let is_complete = false;
+            let mut is_complete = false;
 
             let data_read = match receiver.recv_timeout(remaining_time) {
                 Ok(data) => data,
-                Err(_) => return true,
+                Err(e) => {
+                    if e == RecvTimeoutError::Timeout {
+                        result = Err(Error::Timeout(RecvTimeoutError::Timeout));
+                    }
+                    return true;
+                }
             };
 
-            self.write_all(&data_read).unwrap();
+            if let Err(e) = self.write_all(&data_read).map_err(|e| Error::IO(e)) {
+                result = Err(e);
+                is_complete = true;
+            }
 
             is_complete
         });
+
+        Ok(result?)
     }
 }
 
@@ -209,10 +223,14 @@ where
     ))
 }
 
-/// Exexcutes a function in a loop until operation is completed
-/// or deadline is reached.
+/// Exexcutes a function in a loop until operation is completed or deadline is exceeded.
+///
+/// It checks if a timeout was exceeded every iteration, therefore it limits
+/// how many time a specific function can be called before deadline.
+/// However a deadline may be exceeded if a single function call takes too much time.
 ///
 /// Function `func` needs to return `true` when the operation is complete.
+///
 pub fn execute_with_deadline<F>(deadline: Instant, mut func: F)
 where
     F: FnMut(Duration) -> bool,
@@ -251,4 +269,242 @@ where
     }
 
     buf
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{io::BufReader, sync::mpsc, thread};
+
+    const URI: &str = "http://doc.rust-lang.org/std/string/index.html";
+    const URI_S: &str = "https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol";
+    const TIMEOUT: Duration = Duration::from_secs(3);
+    const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
+                                 Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+                                 Content-Type: text/html\r\n\
+                                 Content-Length: 100\r\n\r\n\
+                                 <html>hello</html>\r\n\r\nhello";
+
+    const RESPONSE_H: &[u8; 102] = b"HTTP/1.1 200 OK\r\n\
+                                   Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+                                   Content-Type: text/html\r\n\
+                                   Content-Length: 100\r\n\r\n";
+
+    #[test]
+    fn stream_new() {
+        {
+            let uri = Uri::try_from(URI).unwrap();
+            let stream = Stream::new(&uri, None);
+
+            assert!(stream.is_ok());
+        }
+        {
+            let uri = Uri::try_from(URI).unwrap();
+            let stream = Stream::new(&uri, Some(TIMEOUT));
+
+            assert!(stream.is_ok());
+        }
+    }
+
+    #[test]
+    fn stream_try_to_https() {
+        {
+            let uri = Uri::try_from(URI_S).unwrap();
+            let stream = Stream::new(&uri, None).unwrap();
+            let https_stream = Stream::try_to_https(stream, &uri, None);
+
+            assert!(https_stream.is_ok());
+
+            // Scheme is `https`, therefore stream should be converted into HTTPS variant
+            match https_stream.unwrap() {
+                Stream::Http(_) => assert!(false),
+                Stream::Https(_) => assert!(true),
+            }
+        }
+        {
+            let uri = Uri::try_from(URI).unwrap();
+            let stream = Stream::new(&uri, None).unwrap();
+            let https_stream = Stream::try_to_https(stream, &uri, None);
+
+            assert!(https_stream.is_ok());
+
+            // Scheme is `http`, therefore stream should returned without changes
+            match https_stream.unwrap() {
+                Stream::Http(_) => assert!(true),
+                Stream::Https(_) => assert!(false),
+            }
+        }
+    }
+
+    #[test]
+    fn stream_set_read_timeot() {
+        {
+            let uri = Uri::try_from(URI).unwrap();
+            let mut stream = Stream::new(&uri, None).unwrap();
+            stream.set_read_timeout(Some(TIMEOUT)).unwrap();
+
+            let inner_read_timeout = if let Stream::Http(inner) = stream {
+                inner.read_timeout().unwrap()
+            } else {
+                None
+            };
+
+            assert_eq!(inner_read_timeout, Some(TIMEOUT));
+        }
+        {
+            let uri = Uri::try_from(URI_S).unwrap();
+            let mut stream = Stream::new(&uri, None).unwrap();
+            stream = Stream::try_to_https(stream, &uri, None).unwrap();
+            stream.set_read_timeout(Some(TIMEOUT)).unwrap();
+
+            let inner_read_timeout = if let Stream::Https(inner) = stream {
+                inner.get_ref().read_timeout().unwrap()
+            } else {
+                None
+            };
+
+            assert_eq!(inner_read_timeout, Some(TIMEOUT));
+        }
+    }
+
+    #[test]
+    fn stream_set_write_timeot() {
+        {
+            let uri = Uri::try_from(URI).unwrap();
+            let mut stream = Stream::new(&uri, None).unwrap();
+            stream.set_write_timeout(Some(TIMEOUT)).unwrap();
+
+            let inner_read_timeout = if let Stream::Http(inner) = stream {
+                inner.write_timeout().unwrap()
+            } else {
+                None
+            };
+
+            assert_eq!(inner_read_timeout, Some(TIMEOUT));
+        }
+        {
+            let uri = Uri::try_from(URI_S).unwrap();
+            let mut stream = Stream::new(&uri, None).unwrap();
+            stream = Stream::try_to_https(stream, &uri, None).unwrap();
+            stream.set_write_timeout(Some(TIMEOUT)).unwrap();
+
+            let inner_read_timeout = if let Stream::Https(inner) = stream {
+                inner.get_ref().write_timeout().unwrap()
+            } else {
+                None
+            };
+
+            assert_eq!(inner_read_timeout, Some(TIMEOUT));
+        }
+    }
+
+    #[test]
+    fn thread_send_send_head() {
+        let (sender, receiver) = mpsc::channel();
+
+        thread::spawn(move || {
+            let mut reader = BufReader::new(RESPONSE.as_slice());
+            reader.send_head(&sender);
+        });
+
+        let raw_head = receiver.recv().unwrap();
+        assert_eq!(raw_head, RESPONSE_H);
+    }
+
+    #[test]
+    fn thread_send_send_all() {
+        let (sender, receiver) = mpsc::channel();
+
+        thread::spawn(move || {
+            let mut reader = BufReader::new(RESPONSE.as_slice());
+            reader.send_all(&sender);
+        });
+
+        let raw_head = receiver.recv().unwrap();
+        assert_eq!(raw_head, RESPONSE);
+    }
+
+    #[test]
+    fn thread_receive_receive() {
+        let (sender, receiver) = mpsc::channel();
+        let deadline = Instant::now() + TIMEOUT;
+
+        thread::spawn(move || {
+            let res = [RESPONSE[..50].to_vec(), RESPONSE[50..].to_vec()];
+
+            for part in res {
+                sender.send(part).unwrap();
+            }
+        });
+
+        let mut buf = Vec::with_capacity(BUF_SIZE);
+        buf.receive(&receiver, deadline).unwrap();
+
+        assert_eq!(buf, RESPONSE[..50]);
+    }
+
+    #[test]
+    fn thread_receive_receive_all() {
+        let (sender, receiver) = mpsc::channel();
+        let deadline = Instant::now() + TIMEOUT;
+
+        thread::spawn(move || {
+            let res = [RESPONSE[..50].to_vec(), RESPONSE[50..].to_vec()];
+
+            for part in res {
+                sender.send(part).unwrap();
+            }
+        });
+
+        let mut buf = Vec::with_capacity(BUF_SIZE);
+        buf.receive_all(&receiver, deadline).unwrap();
+
+        assert_eq!(buf, RESPONSE);
+    }
+
+    #[ignore]
+    #[test]
+    fn fn_execute_with_deadline() {
+        {
+            let star_time = Instant::now();
+            let deadline = star_time + TIMEOUT;
+
+            execute_with_deadline(deadline, |_| {
+                let sleep_time = Duration::from_millis(500);
+                thread::sleep(sleep_time);
+
+                false
+            });
+
+            let end_time = Instant::now();
+            let total_time = end_time.duration_since(star_time).as_secs();
+
+            assert_eq!(total_time, TIMEOUT.as_secs());
+        }
+        {
+            let star_time = Instant::now();
+            let deadline = star_time + TIMEOUT;
+
+            execute_with_deadline(deadline, |_| {
+                let sleep_time = Duration::from_secs(1);
+                thread::sleep(sleep_time);
+
+                true
+            });
+
+            let end_time = Instant::now();
+            let total_time = end_time.duration_since(star_time).as_secs();
+
+            assert_eq!(total_time, 1);
+        }
+    }
+
+    #[test]
+    fn fn_read_head() {
+        let reader = RESPONSE.as_slice();
+        let mut buf_reader = BufReader::new(reader);
+        let raw_head = read_head(&mut buf_reader);
+
+        assert_eq!(raw_head, RESPONSE_H);
+    }
 }

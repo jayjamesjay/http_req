@@ -10,9 +10,6 @@ use std::{
 #[cfg(feature = "native-tls")]
 use std::io::prelude::*;
 
-#[cfg(feature = "rust-tls")]
-use crate::error::ParseErr;
-
 #[cfg(not(any(feature = "native-tls", feature = "rust-tls")))]
 compile_error!("one of the `native-tls` or `rust-tls` features must be enabled");
 
@@ -176,7 +173,7 @@ impl Config {
             std::sync::Arc::new(client_config),
             hostname.as_ref().try_into().map_err(|_| HttpError::Tls)?,
         )
-        .map_err(|e| ParseErr::Rustls(e))?;
+        .map_err(|_| HttpError::Tls)?;
 
         let stream = StreamOwned::new(session, stream);
 
