@@ -10,6 +10,11 @@ use std::{
 #[cfg(feature = "native-tls")]
 use std::io::prelude::*;
 
+#[cfg(feature = "rust-tls")]
+use rustls::{ClientConnection, StreamOwned};
+#[cfg(feature = "rust-tls")]
+use rustls_pki_types::ServerName;
+
 #[cfg(not(any(feature = "native-tls", feature = "rust-tls")))]
 compile_error!("one of the `native-tls` or `rust-tls` features must be enabled");
 
@@ -28,18 +33,21 @@ impl<S> Conn<S>
 where
     S: io::Read + io::Write,
 {
-    /// Returns a reference to the underlying socket
+    /// Returns a reference to the underlying socket.
     pub fn get_ref(&self) -> &S {
         self.stream.get_ref()
     }
 
-    /// Returns a mutable reference to the underlying socket
+    /// Returns a mutable reference to the underlying socket.
     pub fn get_mut(&mut self) -> &mut S {
         self.stream.get_mut()
     }
 }
 
-impl<S: io::Read + io::Write> io::Read for Conn<S> {
+impl<S> io::Read for Conn<S>
+where
+    S: io::Read + io::Write,
+{
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         let len = self.stream.read(buf);
 
@@ -89,14 +97,9 @@ impl Default for Config {
 
     #[cfg(feature = "rust-tls")]
     fn default() -> Self {
-        let mut root_store = rustls::RootCertStore::empty();
-        root_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-            rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-                ta.subject,
-                ta.spki,
-                ta.name_constraints,
-            )
-        }));
+        let root_store = rustls::RootCertStore {
+            roots: webpki_roots::TLS_SERVER_ROOTS.iter().cloned().collect(),
+        };
 
         Config {
             root_certs: std::sync::Arc::new(root_store),
@@ -105,6 +108,7 @@ impl Default for Config {
 }
 
 impl Config {
+    /// Adds root certificates (X.509) from PEM file.
     #[cfg(feature = "native-tls")]
     pub fn add_root_cert_file_pem(&mut self, file_path: &Path) -> Result<&mut Self, HttpError> {
         let f = File::open(file_path)?;
@@ -127,6 +131,7 @@ impl Config {
         Ok(self)
     }
 
+    /// Establishes a secure connection.
     #[cfg(feature = "native-tls")]
     pub fn connect<H, S>(&self, hostname: H, stream: S) -> Result<Conn<S>, HttpError>
     where
@@ -145,33 +150,45 @@ impl Config {
         Ok(Conn { stream })
     }
 
+    /// Adds root certificates (X.509) from a PEM file.
     #[cfg(feature = "rust-tls")]
     pub fn add_root_cert_file_pem(&mut self, file_path: &Path) -> Result<&mut Self, HttpError> {
         let f = File::open(file_path)?;
         let mut f = BufReader::new(f);
 
         let root_certs = std::sync::Arc::make_mut(&mut self.root_certs);
-        root_certs.add_parsable_certificates(&rustls_pemfile::certs(&mut f)?);
+        let mut file_certs = Vec::new();
+
+        for cert in rustls_pemfile::certs(&mut f) {
+            match cert {
+                Ok(item) => {
+                    file_certs.push(item);
+                }
+                Err(e) => return Err(HttpError::IO(e)),
+            }
+        }
+
+        root_certs.add_parsable_certificates(file_certs);
 
         Ok(self)
     }
 
+    /// Establishes a secure connection.
     #[cfg(feature = "rust-tls")]
     pub fn connect<H, S>(&self, hostname: H, stream: S) -> Result<Conn<S>, HttpError>
     where
         H: AsRef<str>,
         S: io::Read + io::Write,
     {
-        use rustls::{ClientConnection, StreamOwned};
+        let hostname = hostname.as_ref().to_string();
 
         let client_config = rustls::ClientConfig::builder()
-            .with_safe_defaults()
             .with_root_certificates(self.root_certs.clone())
             .with_no_client_auth();
 
         let session = ClientConnection::new(
             std::sync::Arc::new(client_config),
-            hostname.as_ref().try_into().map_err(|_| HttpError::Tls)?,
+            ServerName::try_from(hostname).map_err(|_| HttpError::Tls)?,
         )
         .map_err(|_| HttpError::Tls)?;
 

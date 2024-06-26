@@ -15,18 +15,18 @@ unicase = "^2.7"
 
 [features]
 default = ["native-tls"]
-rust-tls = ["rustls", "webpki", "webpki-roots", "rustls-pemfile"]
+rust-tls = ["rustls", "rustls-pki-types", "webpki", "webpki-roots", "rustls-pemfile"]
 
 [dependencies.native-tls]
 version = "^0.2"
 optional = true
 
 [dependencies.rustls]
-version = "^0.21"
+version = "^0.23"
 optional = true
 
 [dependencies.rustls-pemfile]
-version = "^1.0"
+version = "^2.1"
 optional = true
 
 [dependencies.webpki]
@@ -34,5 +34,10 @@ version = "^0.22"
 optional = true
 
 [dependencies.webpki-roots]
-version = "^0.25"
+version = "^0.26"
+optional = true
+
+[dependencies.rustls-pki-types]
+version = "^1.7"
+features = ["alloc"]
 optional = true

@@ -568,24 +568,24 @@ impl<'a> Request<'a> {
     where
         T: Write,
     {
-        //Set up a stream.
+        // Set up a stream.
         let mut stream = Stream::new(self.inner.uri, self.connect_timeout)?;
         stream.set_read_timeout(self.read_timeout)?;
         stream.set_write_timeout(self.write_timeout)?;
         stream = Stream::try_to_https(stream, self.inner.uri, self.root_cert_file_pem)?;
 
-        //Send the request message to stream.
+        // Send the request message to stream.
         let request_msg = self.inner.parse();
         stream.write_all(&request_msg)?;
 
-        //Set up variables
+        // Set up variables
         let deadline = Instant::now() + self.timeout;
         let (sender, receiver) = mpsc::channel();
         let (sender_supp, receiver_supp) = mpsc::channel();
         let mut raw_response_head: Vec<u8> = Vec::new();
         let mut buf_reader = BufReader::new(stream);
 
-        //Read from the stream and send over data via `sender`.
+        // Read from the stream and send over data via `sender`.
         thread::spawn(move || {
             buf_reader.send_head(&sender);
 
@@ -600,7 +600,7 @@ impl<'a> Request<'a> {
             }
         });
 
-        //Receive and process `head` of the response.
+        // Receive and process `head` of the response.
         raw_response_head.receive(&receiver, deadline)?;
 
         let response = Response::from_head(&raw_response_head)?;
@@ -620,7 +620,7 @@ impl<'a> Request<'a> {
 
         sender_supp.send(params).unwrap();
 
-        //Receive and process `body`` of the response.
+        // Receive and process `body` of the response.
         if content_len > 0 {
             writer.receive_all(&receiver, deadline)?;
         }

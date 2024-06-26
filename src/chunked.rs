@@ -7,7 +7,6 @@ const MAX_LINE_LENGTH: usize = 4096;
 /// Implements the wire protocol for HTTP's Transfer-Encoding: chunked.
 ///
 /// It's a Rust version of the [reference implementation in Go](https://golang.google.cn/src/net/http/internal/chunked.go)
-///
 pub struct ChunkReader<R> {
     check_end: bool,
     eof: bool,
@@ -92,7 +91,10 @@ where
     }
 }
 
-impl<R: Read> BufRead for ChunkReader<R> {
+impl<R> BufRead for ChunkReader<R>
+where
+    R: Read,
+{
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.reader.fill_buf()
     }

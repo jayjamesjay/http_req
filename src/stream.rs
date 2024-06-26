@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const BUF_SIZE: usize = 1024 * 1024;
+const BUF_SIZE: usize = 16 * 1000;
 
 /// Wrapper around TCP stream for HTTP and HTTPS protocols.
 /// Allows to perform common operations on underlying stream.
@@ -124,12 +124,12 @@ where
 
     fn send_all(&mut self, sender: &Sender<Vec<u8>>) {
         loop {
-            let mut buf = vec![0; BUF_SIZE];
+            let mut buf = [0; BUF_SIZE];
 
             match self.read(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(len) => {
-                    let filled_buf = buf[..len].to_owned();
+                    let filled_buf = buf[..len].to_vec();
                     sender.send(filled_buf).unwrap();
                 }
             }
