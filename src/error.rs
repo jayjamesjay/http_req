@@ -1,5 +1,5 @@
-//!error system
-use std::{error, fmt, io, num, str};
+//! error system used around the library.
+use std::{error, fmt, io, num, str, sync::mpsc};
 
 #[derive(Debug, PartialEq)]
 pub enum ParseErr {
@@ -10,8 +10,6 @@ pub enum ParseErr {
     UriErr,
     Invalid,
     Empty,
-    #[cfg(feature = "rust-tls")]
-    Rustls(rustls::Error),
 }
 
 impl error::Error for ParseErr {
@@ -22,8 +20,6 @@ impl error::Error for ParseErr {
             Utf8(e) => Some(e),
             Int(e) => Some(e),
             StatusErr | HeadersErr | UriErr | Invalid | Empty => None,
-            #[cfg(feature = "rust-tls")]
-            Rustls(e) => Some(e),
         }
     }
 }
@@ -40,17 +36,8 @@ impl fmt::Display for ParseErr {
             StatusErr => "status line contains invalid values",
             HeadersErr => "headers contain invalid values",
             UriErr => "uri contains invalid characters",
-            #[cfg(feature = "rust-tls")]
-            Rustls(_) => "rustls error",
         };
         write!(f, "ParseErr: {}", err)
-    }
-}
-
-#[cfg(feature = "rust-tls")]
-impl From<rustls::Error> for ParseErr {
-    fn from(e: rustls::Error) -> Self {
-        ParseErr::Rustls(e)
     }
 }
 
@@ -70,6 +57,7 @@ impl From<str::Utf8Error> for ParseErr {
 pub enum Error {
     IO(io::Error),
     Parse(ParseErr),
+    Timeout(mpsc::RecvTimeoutError),
     Tls,
 }
 
@@ -80,6 +68,7 @@ impl error::Error for Error {
         match self {
             IO(e) => Some(e),
             Parse(e) => Some(e),
+            Timeout(e) => Some(e),
             Tls => None,
         }
     }
@@ -91,8 +80,9 @@ impl fmt::Display for Error {
 
         let err = match self {
             IO(_) => "IO error",
-            Tls => "TLS error",
             Parse(err) => return err.fmt(f),
+            Timeout(_) => "Timeout error",
+            Tls => "TLS error",
         };
         write!(f, "Error: {}", err)
     }
@@ -127,5 +117,18 @@ impl From<ParseErr> for Error {
 impl From<str::Utf8Error> for Error {
     fn from(e: str::Utf8Error) -> Self {
         Error::Parse(ParseErr::Utf8(e))
+    }
+}
+
+impl From<mpsc::RecvTimeoutError> for Error {
+    fn from(e: mpsc::RecvTimeoutError) -> Self {
+        Error::Timeout(e)
+    }
+}
+
+#[cfg(feature = "rust-tls")]
+impl From<rustls::Error> for Error {
+    fn from(_e: rustls::Error) -> Self {
+        Error::Tls
     }
 }

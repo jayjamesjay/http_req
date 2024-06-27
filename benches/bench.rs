@@ -3,7 +3,7 @@ extern crate http_req;
 extern crate test;
 
 use http_req::{request::Request, response::Response, uri::Uri};
-use std::{convert::TryFrom, fs::File, io::Read, time::Duration};
+use std::{convert::TryFrom, fs::File, io::Read};
 use test::Bencher;
 
 #[bench]
@@ -24,13 +24,9 @@ const URI: &str = "https://www.rust-lang.org/";
 fn request_send(b: &mut Bencher) {
     b.iter(|| {
         let uri = Uri::try_from(URI).unwrap();
-        let timeout = Some(Duration::from_secs(6));
         let mut writer = Vec::new();
 
-        let res = Request::new(&uri)
-            .timeout(timeout)
-            .send(&mut writer)
-            .unwrap();
+        let res = Request::new(&uri).send(&mut writer).unwrap();
 
         res
     });

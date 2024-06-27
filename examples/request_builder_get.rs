@@ -1,28 +1,46 @@
-use http_req::{request::RequestBuilder, tls, uri::Uri};
-use std::{convert::TryFrom, net::TcpStream};
+use http_req::{
+    request::RequestBuilder,
+    response::Response,
+    stream::{self, Stream},
+    uri::Uri,
+};
+use std::{
+    convert::TryFrom,
+    io::{BufReader, Read, Write},
+    time::Duration,
+};
 
 fn main() {
-    //Parses a URI and assigns it to a variable `addr`.
+    // Parses a URI and assigns it to a variable `addr`.
     let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
 
-    //Connects to a remote host. Uses information from `addr`.
-    let stream = TcpStream::connect((addr.host().unwrap(), addr.corr_port())).unwrap();
+    // Containers for a server's response.
+    let raw_head;
+    let mut body = Vec::new();
 
-    //Opens a secure connection over TlsStream. This is required due to use of `https` protocol.
-    let mut stream = tls::Config::default()
-        .connect(addr.host().unwrap_or(""), stream)
-        .unwrap();
-
-    //Container for a response's body.
-    let mut writer = Vec::new();
-
-    //Adds a header `Connection: Close`.
-    let response = RequestBuilder::new(&addr)
+    // Prepares a request message.
+    let request_msg = RequestBuilder::new(&addr)
         .header("Connection", "Close")
-        .send(&mut stream, &mut writer)
-        .unwrap();
+        .parse();
 
+    // Connects to a server. Uses information from `addr`.
+    let mut stream = Stream::new(&addr, Some(Duration::from_secs(60))).unwrap();
+    stream = Stream::try_to_https(stream, &addr, None).unwrap();
+
+    // Makes a request to server. Sends the prepared message.
+    stream.write_all(&request_msg).unwrap();
+
+    // Wraps the stream in BufReader to make it easier to read from it.
+    // Reads a response from the server and saves the head to `raw_head`, and the body to `body`.
+    let mut stream = BufReader::new(stream);
+    raw_head = stream::read_head(&mut stream);
+    stream.read_to_end(&mut body).unwrap();
+
+    // Parses and processes the response.
+    let response = Response::from_head(&raw_head).unwrap();
+
+    // Prints infromation about the response.
     println!("Status: {} {}", response.status_code(), response.reason());
     println!("Headers: {}", response.headers());
-    //println!("{}", String::from_utf8_lossy(&writer));
+    //println!("{}", String::from_utf8_lossy(&body));
 }
