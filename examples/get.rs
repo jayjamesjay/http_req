@@ -1,10 +1,10 @@
 use http_req::request;
 
 fn main() {
-    //Container for body of a response.
+    // Container for body of a response.
     let mut body = Vec::new();
 
-    //Sends a HTTP GET request and processes the response. Saves body of the response to `body` variable.
+    // Sends a HTTP GET request and processes the response. Saves body of the response to `body` variable.
     let res = request::get("https://www.rust-lang.org/learn", &mut body).unwrap();
 
     //Prints details about the response.

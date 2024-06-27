@@ -26,7 +26,9 @@ pub enum Method {
     POST,
     PUT,
     DELETE,
+    CONNECT,
     OPTIONS,
+    TRACE,
     PATCH,
 }
 
@@ -40,7 +42,9 @@ impl fmt::Display for Method {
             POST => "POST",
             PUT => "PUT",
             DELETE => "DELETE",
+            CONNECT => "CONNECT",
             OPTIONS => "OPTIONS",
+            TRACE => "TRACE",
             PATCH => "PATCH",
         };
 
@@ -300,10 +304,9 @@ impl<'a> Request<'a> {
     /// use http_req::{request::Request, uri::Uri};
     /// use std::convert::TryFrom;
     ///
-    /// let mut writer = Vec::new();
     /// let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    /// let response = Request::new(&uri).send(&mut writer).unwrap();;
+    /// let request = Request::new(&uri);
     /// ```
     pub fn new(uri: &'a Uri) -> Request<'a> {
         let mut builder = RequestBuilder::new(&uri);
@@ -328,7 +331,7 @@ impl<'a> Request<'a> {
     ///
     /// let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    /// let response = Request::new(&uri)
+    /// let request = Request::new(&uri)
     ///     .method(Method::HEAD);
     /// ```
     pub fn method<T>(&mut self, method: T) -> &mut Self
@@ -348,7 +351,7 @@ impl<'a> Request<'a> {
     ///
     /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    /// let response = Request::new(&uri)
+    /// let request = Request::new(&uri)
     ///     .version(HttpVersion::Http10);
     /// ```
 
@@ -375,7 +378,7 @@ impl<'a> Request<'a> {
     /// headers.insert("Host", "rust-lang.org");
     /// headers.insert("Connection", "Close");
     ///
-    /// let response = Request::new(&uri)
+    /// let request = Request::new(&uri)
     ///     .headers(headers);
     /// ```
     pub fn headers<T>(&mut self, headers: T) -> &mut Self
@@ -395,7 +398,7 @@ impl<'a> Request<'a> {
     ///
     /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    /// let response = Request::new(&uri)
+    /// let request = Request::new(&uri)
     ///     .header("Accept-Language", "en-US");
     /// ```
     pub fn header<T, U>(&mut self, key: &T, val: &U) -> &mut Self
@@ -417,7 +420,7 @@ impl<'a> Request<'a> {
     /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     /// const body: &[u8; 27] = b"field1=value1&field2=value2";
     ///
-    /// let response = Request::new(&uri)
+    /// let request = Request::new(&uri)
     ///     .method(Method::POST)
     ///     .header("Content-Length", &body.len())
     ///     .body(body);
@@ -446,7 +449,7 @@ impl<'a> Request<'a> {
     /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     /// const time: Option<Duration> = Some(Duration::from_secs(10));
     ///
-    /// let response = Request::new(&uri)
+    /// let request = Request::new(&uri)
     ///     .connect_timeout(time);
     /// ```
     pub fn connect_timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
@@ -472,7 +475,7 @@ impl<'a> Request<'a> {
     /// let uri: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     /// const time: Option<Duration> = Some(Duration::from_secs(15));
     ///
-    /// let response = Request::new(&uri)
+    /// let request = Request::new(&uri)
     ///     .read_timeout(time);
     /// ```
     pub fn read_timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
@@ -498,7 +501,7 @@ impl<'a> Request<'a> {
     /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     /// const time: Option<Duration> = Some(Duration::from_secs(5));
     ///
-    /// let response = Request::new(&uri)
+    /// let request = Request::new(&uri)
     ///     .write_timeout(time);
     /// ```
     pub fn write_timeout<T>(&mut self, timeout: Option<T>) -> &mut Self
@@ -520,7 +523,7 @@ impl<'a> Request<'a> {
     /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     /// const time: Duration = Duration::from_secs(5);
     ///
-    /// let response = Request::new(&uri)
+    /// let request = Request::new(&uri)
     ///     .timeout(time);
     /// ```
     pub fn timeout<T>(&mut self, timeout: T) -> &mut Self
@@ -541,7 +544,7 @@ impl<'a> Request<'a> {
     /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     /// let path = Path::new("./foo/bar.txt");
     ///
-    /// let response = Request::new(&uri)
+    /// let request = Request::new(&uri)
     ///     .root_cert_file_pem(&path);
     /// ```
     pub fn root_cert_file_pem(&mut self, file_path: &'a Path) -> &mut Self {

@@ -226,11 +226,14 @@ where
 /// Exexcutes a function in a loop until operation is completed or deadline is exceeded.
 ///
 /// It checks if a timeout was exceeded every iteration, therefore it limits
-/// how many time a specific function can be called before deadline.
-/// However a deadline may be exceeded if a single function call takes too much time.
-///
-/// Function `func` needs to return `true` when the operation is complete.
-///
+/// how many time a specific function can be called before deadline. 
+/// For the `execute_with_deadline` to meet the deadline, each call 
+/// to `func` needs finish before the deadline. 
+/// 
+/// Key information about function `func`:
+/// - is provided with information about remaining time
+/// - must ensure that its execution will not take more time than specified in `remaining_time`
+/// - needs to return `true` when the operation is complete
 pub fn execute_with_deadline<F>(deadline: Instant, mut func: F)
 where
     F: FnMut(Duration) -> bool,
@@ -247,8 +250,8 @@ where
 
 /// Reads the head of HTTP response from `reader`.
 ///
-/// Reads from `reader` (line by line) until a blank line is found
-/// indicating that all meta-information for the request has been sent.
+/// Reads from `reader` (line by line) until a blank line is identified, 
+/// which indicates that all meta-information has been read,
 pub fn read_head<B>(reader: &mut B) -> Vec<u8>
 where
     B: BufRead,
