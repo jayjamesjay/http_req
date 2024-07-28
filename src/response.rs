@@ -1,6 +1,7 @@
 //! parsing server response
 use crate::{
     error::{Error, ParseErr},
+    request::Method,
     uri::Uri,
 };
 use std::{
@@ -187,6 +188,24 @@ impl Response {
         self.headers()
             .get("Transfer-Encoding")
             .is_some_and(|encodings| encodings.contains("chunked"))
+    }
+
+    /// Returns basic information about the response as an array, including:
+    /// - chunked -> Transfer-Encoding includes "chunked"
+    /// - non-empty -> Content-Length is greater than 0 (or unknown) and method is not HEAD
+    pub fn basic_info<'a>(&self, method: &Method) -> [&'a str; 2] {
+        let mut params = [""; 2];
+        let content_len = self.content_len().unwrap_or(1);
+
+        if self.is_chunked() {
+            params[0] = "chunked";
+        }
+
+        if content_len > 0 && method != &Method::HEAD {
+            params[1] = "non-empty";
+        }
+
+        params
     }
 }
 
@@ -512,7 +531,7 @@ impl StatusCode {
     /// const code: StatusCode = StatusCode::new(200);
     /// assert_eq!(code.reason(), Some("OK"))
     /// ```
-    pub const fn reason(self) -> Option<&'static str> {
+    pub const fn reason(&self) -> Option<&str> {
         let reason = match self.0 {
             100 => "Continue",
             101 => "Switching Protocols",

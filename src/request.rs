@@ -7,6 +7,7 @@ use crate::{
     uri::Uri,
 };
 use std::{
+    convert::TryFrom,
     fmt,
     io::{BufReader, Write},
     path::Path,
@@ -61,7 +62,7 @@ pub enum HttpVersion {
 }
 
 impl HttpVersion {
-    pub const fn as_str(self) -> &'static str {
+    pub const fn as_str(&self) -> &str {
         use self::HttpVersion::*;
 
         match self {
@@ -92,7 +93,7 @@ impl<'a> RequestBuilder {
 
 /// Allows to control redirects
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum RedirectPolicy<F: Fn() -> bool> {
+pub enum RedirectPolicy<F> {
     /// Follows redirect if limit is greater than 0.
     Limit(usize),
     /// Runs functions `F` to determine if redirect should be followed.
@@ -102,13 +103,25 @@ pub enum RedirectPolicy<F: Fn() -> bool> {
 impl<F: Fn() -> bool> RedirectPolicy<F> {
     /// Checks the policy againt specified conditions.
     /// Returns `true` if redirect should be followed.
-    pub fn follow(&self) -> bool {
+    pub fn follow(&mut self) -> bool {
         use self::RedirectPolicy::*;
 
         match self {
-            Limit(limit) => *limit > 0,
+            Limit(limit) => match limit {
+                0 => false,
+                _ => {
+                    *limit = *limit - 1;
+                    true
+                }
+            },
             Custom(func) => func(),
         }
+    }
+}
+
+impl<F: Fn() -> bool> Default for RedirectPolicy<F> {
+    fn default() -> Self {
+        RedirectPolicy::Limit(5)
     }
 }
 
@@ -323,6 +336,7 @@ impl<'a> RequestMessage<'a> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Request<'a> {
     messsage: RequestMessage<'a>,
+    redirect_policy: RedirectPolicy<fn() -> bool>,
     connect_timeout: Option<Duration>,
     read_timeout: Option<Duration>,
     write_timeout: Option<Duration>,
@@ -348,6 +362,7 @@ impl<'a> Request<'a> {
 
         Request {
             messsage: message,
+            redirect_policy: RedirectPolicy::default(),
             connect_timeout: Some(Duration::from_secs(60)),
             read_timeout: Some(Duration::from_secs(60)),
             write_timeout: Some(Duration::from_secs(60)),
@@ -586,6 +601,23 @@ impl<'a> Request<'a> {
         self
     }
 
+    /// Sets the redirect policy for the request.
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::{request::{Request, RedirectPolicy}, uri::Uri};
+    /// use std::{time::Duration, convert::TryFrom, path::Path};
+    ///
+    /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    ///
+    /// let request = Request::new(&uri)
+    ///     .redirect_policy(RedirectPolicy::Limit(5));
+    /// ```
+    pub fn redirect_policy(&mut self, policy: RedirectPolicy<fn() -> bool>) -> &mut Self {
+        self.redirect_policy = policy;
+        self
+    }
+
     /// Sends the HTTP request and returns `Response`.
     ///
     /// Creates `TcpStream` (and wraps it with `TlsStream` if needed). Writes request message
@@ -601,7 +633,7 @@ impl<'a> Request<'a> {
     ///
     /// let response = Request::new(&uri).send(&mut writer).unwrap();
     /// ```
-    pub fn send<T>(&self, writer: &mut T) -> Result<Response, error::Error>
+    pub fn send<T>(&mut self, writer: &mut T) -> Result<Response, error::Error>
     where
         T: Write,
     {
@@ -626,7 +658,7 @@ impl<'a> Request<'a> {
         thread::spawn(move || {
             buf_reader.send_head(&sender);
 
-            let params: Vec<&str> = receiver_supp.recv().unwrap();
+            let params: Vec<&str> = receiver_supp.recv().unwrap_or(Vec::new());
             if params.contains(&"non-empty") {
                 if params.contains(&"chunked") {
                     let mut buf_reader = ChunkReader::from(buf_reader);
@@ -639,22 +671,28 @@ impl<'a> Request<'a> {
 
         // Receive and process `head` of the response.
         raw_response_head.receive(&receiver, deadline)?;
-
         let response = Response::from_head(&raw_response_head)?;
-        let content_len = response.content_len().unwrap_or(1);
-        let mut params = Vec::with_capacity(5);
 
-        if response.is_chunked() {
-            params.push("chunked");
+        if response.status_code().is_redirect() && self.redirect_policy.follow() {
+            if let Some(location) = response.headers().get("Location") {
+                let mut raw_uri = location.to_string();
+                let uri = if Uri::is_relative(&raw_uri) {
+                    self.messsage.uri.from_relative(&mut raw_uri)
+                } else {
+                    Uri::try_from(raw_uri.as_str())
+                }?;
+
+                return Request::new(&uri)
+                    .redirect_policy(self.redirect_policy)
+                    .send(writer);
+            }
         }
 
-        if content_len > 0 && self.messsage.method != Method::HEAD {
-            params.push("non-empty");
-        }
-
+        let params = response.basic_info(&self.messsage.method).to_vec();
         sender_supp.send(params).unwrap();
 
         // Receive and process `body` of the response.
+        let content_len = response.content_len().unwrap_or(1);
         if content_len > 0 {
             writer.receive_all(&receiver, deadline)?;
         }

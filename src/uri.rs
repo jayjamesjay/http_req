@@ -80,6 +80,11 @@ pub struct Uri<'a> {
 }
 
 impl<'a> Uri<'a> {
+    /// Returns a reference to the underlying &str.
+    pub fn get_ref(&self) -> &str {
+        self.inner
+    }
+
     /// Returns scheme of this `Uri`.
     ///
     /// # Example
@@ -95,7 +100,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns information about the user included in this `Uri`.
-    ///      
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -109,7 +114,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns host of this `Uri`.
-    ///      
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -123,7 +128,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns host of this `Uri` to use in a header.
-    ///      
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -140,7 +145,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns port of this `Uri`
-    ///      
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -155,7 +160,7 @@ impl<'a> Uri<'a> {
 
     /// Returns port corresponding to this `Uri`.
     /// Returns default port if it hasn't been set in the uri.
-    ///   
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -177,7 +182,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns path of this `Uri`.
-    ///   
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -191,7 +196,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns query of this `Uri`.
-    ///   
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -205,7 +210,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns fragment of this `Uri`.
-    ///   
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -219,7 +224,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns resource `Uri` points to.
-    ///   
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -233,6 +238,28 @@ impl<'a> Uri<'a> {
             Some(p) => &self.inner[p.start..],
             None => "/",
         }
+    }
+
+    /// Checks if &str is an relative uri.
+    pub fn is_relative(raw_uri: &str) -> bool {
+        raw_uri.starts_with("/")
+            || raw_uri.starts_with("?")
+            || raw_uri.starts_with("#")
+            || raw_uri.starts_with("@")
+    }
+
+    /// Creates a new `Uri` from current uri and relative uri.
+    /// Transforms the relative uri into an absolute uri.
+    pub fn from_relative(&'a self, relative_uri: &'a mut String) -> Result<Uri<'a>, Error> {
+        let inner_uri = self.inner;
+        let mut relative_part = relative_uri.as_ref();
+
+        if inner_uri.ends_with("/") && relative_uri.starts_with("/") {
+            relative_part = relative_uri.trim_start_matches("/");
+        }
+
+        *relative_uri = inner_uri.to_owned() + relative_part;
+        Uri::try_from(relative_uri.as_str())
     }
 }
 
