@@ -1,5 +1,5 @@
 //! Simple HTTP client with built-in HTTPS support.
-//! 
+//!
 //! By default uses [rust-native-tls](https://github.com/sfackler/rust-native-tls),
 //! which relies on TLS framework provided by OS on Windows and macOS, and OpenSSL
 //! on all other platforms. But it also supports [rus-tls](https://crates.io/crates/rustls).

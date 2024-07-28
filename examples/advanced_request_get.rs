@@ -1,5 +1,5 @@
 use http_req::{
-    request::RequestBuilder,
+    request::RequestMessage,
     response::Response,
     stream::{self, Stream},
     uri::Uri,
@@ -19,7 +19,7 @@ fn main() {
     let mut body = Vec::new();
 
     // Prepares a request message.
-    let request_msg = RequestBuilder::new(&addr)
+    let request_msg = RequestMessage::new(&addr)
         .header("Connection", "Close")
         .parse();
 

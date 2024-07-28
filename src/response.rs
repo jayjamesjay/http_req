@@ -60,7 +60,10 @@ impl Response {
     ///
     /// let response = Response::try_from(RESPONSE, &mut body).unwrap();
     /// ```
-    pub fn try_from<T: Write>(res: &[u8], writer: &mut T) -> Result<Response, Error> {
+    pub fn try_from<T>(res: &[u8], writer: &mut T) -> Result<Response, Error>
+    where
+        T: Write,
+    {
         if res.is_empty() {
             Err(Error::Parse(ParseErr::Empty))
         } else {
@@ -152,7 +155,7 @@ impl Response {
     /// let response = Response::try_from(RESPONSE, &mut body).unwrap();
     /// let headers = response.headers();
     /// ```
-    pub fn headers(&self) -> &Headers {
+    pub const fn headers(&self) -> &Headers {
         &self.headers
     }
 
@@ -177,6 +180,13 @@ impl Response {
         self.headers()
             .get("Content-Length")
             .and_then(|len| len.parse().ok())
+    }
+
+    /// Checks if Transfer-Encoding includes "chunked".
+    pub fn is_chunked(&self) -> bool {
+        self.headers()
+            .get("Transfer-Encoding")
+            .is_some_and(|encodings| encodings.contains("chunked"))
     }
 }
 
