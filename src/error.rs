@@ -29,13 +29,13 @@ impl fmt::Display for ParseErr {
         use self::ParseErr::*;
 
         let err = match self {
-            Utf8(_) => "invalid character",
-            Int(_) => "cannot parse number",
-            Invalid => "invalid value",
-            Empty => "nothing to parse",
-            StatusErr => "status line contains invalid values",
-            HeadersErr => "headers contain invalid values",
-            UriErr => "uri contains invalid characters",
+            Utf8(_) => "Invalid character",
+            Int(_) => "Cannot parse number",
+            Invalid => "Invalid value",
+            Empty => "Nothing to parse",
+            StatusErr => "Status line contains invalid values",
+            HeadersErr => "Headers contain invalid values",
+            UriErr => "URI contains invalid characters",
         };
         write!(f, "ParseErr: {}", err)
     }
@@ -57,8 +57,9 @@ impl From<str::Utf8Error> for ParseErr {
 pub enum Error {
     IO(io::Error),
     Parse(ParseErr),
-    Timeout(mpsc::RecvTimeoutError),
+    Timeout,
     Tls,
+    Thread,
 }
 
 impl error::Error for Error {
@@ -68,8 +69,7 @@ impl error::Error for Error {
         match self {
             IO(e) => Some(e),
             Parse(e) => Some(e),
-            Timeout(e) => Some(e),
-            Tls => None,
+            Timeout | Tls | Thread => None,
         }
     }
 }
@@ -81,24 +81,11 @@ impl fmt::Display for Error {
         let err = match self {
             IO(_) => "IO error",
             Parse(err) => return err.fmt(f),
-            Timeout(_) => "Timeout error",
+            Timeout => "Timeout error",
             Tls => "TLS error",
+            Thread => "Thread communication error",
         };
         write!(f, "Error: {}", err)
-    }
-}
-
-#[cfg(feature = "native-tls")]
-impl From<native_tls::Error> for Error {
-    fn from(_e: native_tls::Error) -> Self {
-        Error::Tls
-    }
-}
-
-#[cfg(feature = "native-tls")]
-impl<T> From<native_tls::HandshakeError<T>> for Error {
-    fn from(_e: native_tls::HandshakeError<T>) -> Self {
-        Error::Tls
     }
 }
 
@@ -121,8 +108,8 @@ impl From<str::Utf8Error> for Error {
 }
 
 impl From<mpsc::RecvTimeoutError> for Error {
-    fn from(e: mpsc::RecvTimeoutError) -> Self {
-        Error::Timeout(e)
+    fn from(_e: mpsc::RecvTimeoutError) -> Self {
+        Error::Timeout
     }
 }
 
@@ -130,5 +117,25 @@ impl From<mpsc::RecvTimeoutError> for Error {
 impl From<rustls::Error> for Error {
     fn from(_e: rustls::Error) -> Self {
         Error::Tls
+    }
+}
+
+#[cfg(feature = "native-tls")]
+impl From<native_tls::Error> for Error {
+    fn from(_e: native_tls::Error) -> Self {
+        Error::Tls
+    }
+}
+
+#[cfg(feature = "native-tls")]
+impl<T> From<native_tls::HandshakeError<T>> for Error {
+    fn from(_e: native_tls::HandshakeError<T>) -> Self {
+        Error::Tls
+    }
+}
+
+impl<T> From<mpsc::SendError<T>> for Error {
+    fn from(_e: mpsc::SendError<T>) -> Self {
+        Error::Thread
     }
 }

@@ -21,7 +21,7 @@ pub enum Stream {
 
 impl Stream {
     /// Opens a TCP connection to a remote host with a connection timeout (if specified).
-    pub fn new(uri: &Uri, connect_timeout: Option<Duration>) -> Result<Stream, Error> {
+    pub fn connect(uri: &Uri, connect_timeout: Option<Duration>) -> Result<Stream, Error> {
         let host = uri.host().unwrap_or("");
         let port = uri.corr_port();
 
@@ -120,7 +120,7 @@ where
 {
     fn send_head(&mut self, sender: &Sender<Vec<u8>>) {
         let buf = read_head(self);
-        sender.send(buf).unwrap();
+        sender.send(buf).unwrap_or(());
     }
 
     fn send_all(&mut self, sender: &Sender<Vec<u8>>) {
@@ -131,7 +131,9 @@ where
                 Ok(0) | Err(_) => break,
                 Ok(len) => {
                     let filled_buf = buf[..len].to_vec();
-                    sender.send(filled_buf).unwrap();
+                    if let Err(_) = sender.send(filled_buf) {
+                        break;
+                    }
                 }
             }
         }
@@ -175,7 +177,7 @@ where
                 Ok(data) => data,
                 Err(e) => {
                     if e == RecvTimeoutError::Timeout {
-                        result = Err(Error::Timeout(RecvTimeoutError::Timeout));
+                        result = Err(Error::Timeout);
                     }
                     return true;
                 }
@@ -189,7 +191,7 @@ where
             is_complete
         });
 
-        Ok(result?)
+        result
     }
 }
 
@@ -298,13 +300,13 @@ mod tests {
     fn stream_new() {
         {
             let uri = Uri::try_from(URI).unwrap();
-            let stream = Stream::new(&uri, None);
+            let stream = Stream::connect(&uri, None);
 
             assert!(stream.is_ok());
         }
         {
             let uri = Uri::try_from(URI).unwrap();
-            let stream = Stream::new(&uri, Some(TIMEOUT));
+            let stream = Stream::connect(&uri, Some(TIMEOUT));
 
             assert!(stream.is_ok());
         }
@@ -314,7 +316,7 @@ mod tests {
     fn stream_try_to_https() {
         {
             let uri = Uri::try_from(URI_S).unwrap();
-            let stream = Stream::new(&uri, None).unwrap();
+            let stream = Stream::connect(&uri, None).unwrap();
             let https_stream = Stream::try_to_https(stream, &uri, None);
 
             assert!(https_stream.is_ok());
@@ -327,7 +329,7 @@ mod tests {
         }
         {
             let uri = Uri::try_from(URI).unwrap();
-            let stream = Stream::new(&uri, None).unwrap();
+            let stream = Stream::connect(&uri, None).unwrap();
             let https_stream = Stream::try_to_https(stream, &uri, None);
 
             assert!(https_stream.is_ok());
@@ -344,7 +346,7 @@ mod tests {
     fn stream_set_read_timeot() {
         {
             let uri = Uri::try_from(URI).unwrap();
-            let mut stream = Stream::new(&uri, None).unwrap();
+            let mut stream = Stream::connect(&uri, None).unwrap();
             stream.set_read_timeout(Some(TIMEOUT)).unwrap();
 
             let inner_read_timeout = if let Stream::Http(inner) = stream {
@@ -357,7 +359,7 @@ mod tests {
         }
         {
             let uri = Uri::try_from(URI_S).unwrap();
-            let mut stream = Stream::new(&uri, None).unwrap();
+            let mut stream = Stream::connect(&uri, None).unwrap();
             stream = Stream::try_to_https(stream, &uri, None).unwrap();
             stream.set_read_timeout(Some(TIMEOUT)).unwrap();
 
@@ -375,7 +377,7 @@ mod tests {
     fn stream_set_write_timeot() {
         {
             let uri = Uri::try_from(URI).unwrap();
-            let mut stream = Stream::new(&uri, None).unwrap();
+            let mut stream = Stream::connect(&uri, None).unwrap();
             stream.set_write_timeout(Some(TIMEOUT)).unwrap();
 
             let inner_read_timeout = if let Stream::Http(inner) = stream {
@@ -388,7 +390,7 @@ mod tests {
         }
         {
             let uri = Uri::try_from(URI_S).unwrap();
-            let mut stream = Stream::new(&uri, None).unwrap();
+            let mut stream = Stream::connect(&uri, None).unwrap();
             stream = Stream::try_to_https(stream, &uri, None).unwrap();
             stream.set_write_timeout(Some(TIMEOUT)).unwrap();
 

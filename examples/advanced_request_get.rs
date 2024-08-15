@@ -24,7 +24,7 @@ fn main() {
         .parse();
 
     // Connects to a server. Uses information from `addr`.
-    let mut stream = Stream::new(&addr, Some(Duration::from_secs(60))).unwrap();
+    let mut stream = Stream::connect(&addr, Some(Duration::from_secs(60))).unwrap();
     stream = Stream::try_to_https(stream, &addr, None).unwrap();
 
     // Makes a request to server. Sends the prepared message.

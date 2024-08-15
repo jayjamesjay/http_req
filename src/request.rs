@@ -18,6 +18,7 @@ use std::{
 
 const CR_LF: &str = "\r\n";
 const DEFAULT_REQ_TIMEOUT: u64 = 60 * 60;
+const DEFAULT_CALL_TIMEOUT: u64 = 60;
 
 /// HTTP request methods
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -308,8 +309,8 @@ impl<'a> RequestMessage<'a> {
 
         let mut request_msg = (request_line + &headers + CR_LF).as_bytes().to_vec();
 
-        if let Some(b) = &self.body {
-            request_msg.extend(*b);
+        if let Some(b) = self.body {
+            request_msg.extend(b);
         }
 
         request_msg
@@ -363,9 +364,9 @@ impl<'a> Request<'a> {
         Request {
             messsage: message,
             redirect_policy: RedirectPolicy::default(),
-            connect_timeout: Some(Duration::from_secs(60)),
-            read_timeout: Some(Duration::from_secs(60)),
-            write_timeout: Some(Duration::from_secs(60)),
+            connect_timeout: Some(Duration::from_secs(DEFAULT_CALL_TIMEOUT)),
+            read_timeout: Some(Duration::from_secs(DEFAULT_CALL_TIMEOUT)),
+            write_timeout: Some(Duration::from_secs(DEFAULT_CALL_TIMEOUT)),
             timeout: Duration::from_secs(DEFAULT_REQ_TIMEOUT),
             root_cert_file_pem: None,
         }
@@ -613,8 +614,11 @@ impl<'a> Request<'a> {
     /// let request = Request::new(&uri)
     ///     .redirect_policy(RedirectPolicy::Limit(5));
     /// ```
-    pub fn redirect_policy(&mut self, policy: RedirectPolicy<fn() -> bool>) -> &mut Self {
-        self.redirect_policy = policy;
+    pub fn redirect_policy<T>(&mut self, policy: T) -> &mut Self
+    where
+        RedirectPolicy<fn() -> bool>: From<T>,
+    {
+        self.redirect_policy = RedirectPolicy::from(policy);
         self
     }
 
@@ -638,7 +642,7 @@ impl<'a> Request<'a> {
         T: Write,
     {
         // Set up a stream.
-        let mut stream = Stream::new(self.messsage.uri, self.connect_timeout)?;
+        let mut stream = Stream::connect(self.messsage.uri, self.connect_timeout)?;
         stream.set_read_timeout(self.read_timeout)?;
         stream.set_write_timeout(self.write_timeout)?;
         stream = Stream::try_to_https(stream, self.messsage.uri, self.root_cert_file_pem)?;
@@ -689,7 +693,7 @@ impl<'a> Request<'a> {
         }
 
         let params = response.basic_info(&self.messsage.method).to_vec();
-        sender_supp.send(params).unwrap();
+        sender_supp.send(params)?;
 
         // Receive and process `body` of the response.
         let content_len = response.content_len().unwrap_or(1);

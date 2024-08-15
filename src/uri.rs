@@ -240,26 +240,58 @@ impl<'a> Uri<'a> {
         }
     }
 
-    /// Checks if &str is an relative uri.
+    /// Checks if &str is a relative uri.
     pub fn is_relative(raw_uri: &str) -> bool {
         raw_uri.starts_with("/")
             || raw_uri.starts_with("?")
             || raw_uri.starts_with("#")
-            || raw_uri.starts_with("@")
+            || !raw_uri.contains(":")
     }
 
     /// Creates a new `Uri` from current uri and relative uri.
     /// Transforms the relative uri into an absolute uri.
     pub fn from_relative(&'a self, relative_uri: &'a mut String) -> Result<Uri<'a>, Error> {
         let inner_uri = self.inner;
-        let mut relative_part = relative_uri.as_ref();
+        let mut resource = self.resource().to_string();
 
-        if inner_uri.ends_with("/") && relative_uri.starts_with("/") {
-            relative_part = relative_uri.trim_start_matches("/");
-        }
+        resource = match &relative_uri.get(..1) {
+            Some("#") => Uri::add_part(&resource, relative_uri, "#"),
+            Some("?") => Uri::add_part(&self.path().unwrap_or("/"), relative_uri, "?"),
+            Some("/") => Uri::add_part(&resource, relative_uri, "/"),
+            Some(_) | None => {
+                let part_idx = resource.rfind("/");
 
-        *relative_uri = inner_uri.to_owned() + relative_part;
+                match part_idx {
+                    Some(idx) => resource[..idx].to_string() + relative_uri,
+                    None => {
+                        if resource.starts_with("/") {
+                            resource.to_string() + relative_uri
+                        } else {
+                            resource.to_string() + "/" + relative_uri
+                        }
+                    }
+                }
+            }
+        };
+
+        *relative_uri = if let Some(p) = self.path {
+            inner_uri[..p.start].to_string() + &resource
+        } else {
+            inner_uri.trim_end_matches("/").to_string() + &resource
+        };
+
         Uri::try_from(relative_uri.as_str())
+    }
+
+    /// Adds a part to a base at the position definied by a separator.
+    /// If the separator is not found, concatenates 2 strings together.
+    fn add_part(base: &str, part: &str, separator: &str) -> String {
+        let part_idx = base.find(separator);
+
+        match part_idx {
+            Some(idx) => base[..idx].to_string() + part,
+            None => base.to_string() + part,
+        }
     }
 }
 
@@ -531,6 +563,16 @@ mod tests {
         "[4b10:bbb0:0:d0::ba7:8001]:443",
     ];
 
+    const TEST_PARTS: [&str; 7] = [
+        "?query123",
+        "/path",
+        "#fragment",
+        "other-path",
+        "#paragraph",
+        "/foo/bar/buz",
+        "?users#1551",
+    ];
+
     #[test]
     fn remove_space() {
         let mut text = String::from("Hello World     !");
@@ -746,6 +788,55 @@ mod tests {
 
         for i in 0..RESULT.len() {
             assert_eq!(uris[i].resource(), RESULT[i]);
+        }
+    }
+
+    #[test]
+    fn uri_is_relative() {
+        for i in 0..TEST_URIS.len() {
+            assert!(!Uri::is_relative(TEST_URIS[i]));
+        }
+
+        for i in 0..TEST_PARTS.len() {
+            assert!(Uri::is_relative(TEST_PARTS[i]));
+        }
+    }
+
+    #[test]
+    fn uri_from_relative() {
+        let uris: Vec<_> = TEST_URIS
+            .iter()
+            .map(|&uri| Uri::try_from(uri).unwrap())
+            .collect();
+
+        const RESULT: [&str; 7] = [
+            "https://user:info@foo.com:12/bar/baz?query123",
+            "file:///path",
+            "https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol#fragment",
+            "mailto:John.Doe@example.com/other-path",
+            "https://[4b10:bbb0:0:d0::ba7:8001]:443/#paragraph",
+            "http://example.com/foo/bar/buz",
+            "https://example.com/?users#1551",
+        ];
+
+        for i in 0..RESULT.len() {
+            let mut uri_part = TEST_PARTS[i].to_string();
+
+            println!("{}", uris[i].resource());
+            assert_eq!(
+                uris[i].from_relative(&mut uri_part).unwrap().inner,
+                RESULT[i]
+            );
+        }
+    }
+
+    #[test]
+    fn uri_add_part() {
+        const BASES: [&str; 2] = ["/bar/baz?query", "/bar/baz?query#some-fragment"];
+        const RESULT: &str = "/bar/baz?query#another-fragment";
+
+        for i in 0..BASES.len() {
+            assert_eq!(Uri::add_part(BASES[i], "#another-fragment", "#"), RESULT);
         }
     }
 
