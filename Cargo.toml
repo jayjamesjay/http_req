@@ -15,7 +15,13 @@ unicase = "^2.7"
 
 [features]
 default = ["native-tls"]
-rust-tls = ["rustls", "rustls-pki-types", "webpki", "webpki-roots", "rustls-pemfile"]
+rust-tls = [
+    "rustls",
+    "rustls-pki-types",
+    "webpki",
+    "webpki-roots",
+    "rustls-pemfile",
+]
 
 [dependencies.native-tls]
 version = "^0.2"
