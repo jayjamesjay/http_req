@@ -1,5 +1,5 @@
 use http_req::{
-    request::RequestBuilder,
+    request::RequestMessage,
     response::Response,
     stream::{self, Stream},
     uri::Uri,
@@ -19,12 +19,12 @@ fn main() {
     let mut body = Vec::new();
 
     // Prepares a request message.
-    let request_msg = RequestBuilder::new(&addr)
+    let request_msg = RequestMessage::new(&addr)
         .header("Connection", "Close")
         .parse();
 
     // Connects to a server. Uses information from `addr`.
-    let mut stream = Stream::new(&addr, Some(Duration::from_secs(60))).unwrap();
+    let mut stream = Stream::connect(&addr, Some(Duration::from_secs(60))).unwrap();
     stream = Stream::try_to_https(stream, &addr, None).unwrap();
 
     // Makes a request to server. Sends the prepared message.

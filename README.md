@@ -1,12 +1,15 @@
 # http_req
 > [!CAUTION]
-> v0.11.0 introduces major changes to design of `RequestBuilder` and `Request`. Please review [documentation](https://docs.rs/http_req/0.11.0/http_req/) before migrating from previous versions.
+> v0.12.0 replaces `RequestBuilder` with `RequestMessage`. Please review [documentation](https://docs.rs/http_req/0.12.0/http_req/) before migrating from previous versions.
 
 [![Rust](https://github.com/jayjamesjay/http_req/actions/workflows/rust.yml/badge.svg)](https://github.com/jayjamesjay/http_req/actions/workflows/rust.yml)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.11.1-orange.svg?longCache=true)](https://crates.io/crates/http_req)
-[![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.11.1/http_req/)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.12.0-orange.svg?longCache=true)](https://crates.io/crates/http_req)
+[![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.12.0/http_req/)
 
 Simple and lightweight HTTP client with built-in HTTPS support.
+- HTTP and HTTPS via [rust-native-tls](https://github.com/sfackler/rust-native-tls) (or optionally [rus-tls](https://crates.io/crates/rustls))
+- Small binary size (less than 0.7 MB for basic GET request)
+- Minimal amount of dependencies
 
 ## Requirements
 http_req by default uses [rust-native-tls](https://github.com/sfackler/rust-native-tls),
@@ -32,7 +35,7 @@ Take a look at [more examples](https://github.com/jayjamesjay/http_req/tree/mast
 In order to use `http_req` with `rustls` in your project, add the following lines to `Cargo.toml`:
 ```toml
 [dependencies]
-http_req  = {version="^0.11", default-features = false, features = ["rust-tls"]}
+http_req  = {version="^0.12", default-features = false, features = ["rust-tls"]}
 ```
 
 ## License

@@ -1,6 +1,7 @@
 //! parsing server response
 use crate::{
     error::{Error, ParseErr},
+    request::Method,
     uri::Uri,
 };
 use std::{
@@ -60,7 +61,10 @@ impl Response {
     ///
     /// let response = Response::try_from(RESPONSE, &mut body).unwrap();
     /// ```
-    pub fn try_from<T: Write>(res: &[u8], writer: &mut T) -> Result<Response, Error> {
+    pub fn try_from<T>(res: &[u8], writer: &mut T) -> Result<Response, Error>
+    where
+        T: Write,
+    {
         if res.is_empty() {
             Err(Error::Parse(ParseErr::Empty))
         } else {
@@ -152,7 +156,7 @@ impl Response {
     /// let response = Response::try_from(RESPONSE, &mut body).unwrap();
     /// let headers = response.headers();
     /// ```
-    pub fn headers(&self) -> &Headers {
+    pub const fn headers(&self) -> &Headers {
         &self.headers
     }
 
@@ -177,6 +181,31 @@ impl Response {
         self.headers()
             .get("Content-Length")
             .and_then(|len| len.parse().ok())
+    }
+
+    /// Checks if Transfer-Encoding includes "chunked".
+    pub fn is_chunked(&self) -> bool {
+        self.headers()
+            .get("Transfer-Encoding")
+            .is_some_and(|encodings| encodings.contains("chunked"))
+    }
+
+    /// Returns basic information about the response as an array, including:
+    /// - chunked -> Transfer-Encoding includes "chunked"
+    /// - non-empty -> Content-Length is greater than 0 (or unknown) and method is not HEAD
+    pub fn basic_info<'a>(&self, method: &Method) -> [&'a str; 2] {
+        let mut params = [""; 2];
+        let content_len = self.content_len().unwrap_or(1);
+
+        if self.is_chunked() {
+            params[0] = "chunked";
+        }
+
+        if content_len > 0 && method != &Method::HEAD {
+            params[1] = "non-empty";
+        }
+
+        params
     }
 }
 
@@ -502,7 +531,7 @@ impl StatusCode {
     /// const code: StatusCode = StatusCode::new(200);
     /// assert_eq!(code.reason(), Some("OK"))
     /// ```
-    pub const fn reason(self) -> Option<&'static str> {
+    pub const fn reason(&self) -> Option<&str> {
         let reason = match self.0 {
             100 => "Continue",
             101 => "Switching Protocols",

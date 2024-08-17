@@ -18,9 +18,10 @@ use rustls_pki_types::ServerName;
 #[cfg(not(any(feature = "native-tls", feature = "rust-tls")))]
 compile_error!("one of the `native-tls` or `rust-tls` features must be enabled");
 
-/// Wrapper around TLS Stream, depends on selected TLS library (`S: io::Read + io::Write`):
+/// Wrapper around TLS Stream, depends on selected TLS library:
 /// - native_tls: `TlsStream<S>`
 /// - rustls: `StreamOwned<ClientConnection, S>`
+#[derive(Debug)]
 pub struct Conn<S: io::Read + io::Write> {
     #[cfg(feature = "native-tls")]
     stream: native_tls::TlsStream<S>,
@@ -70,7 +71,10 @@ where
     }
 }
 
-impl<S: io::Read + io::Write> io::Write for Conn<S> {
+impl<S> io::Write for Conn<S>
+where
+    S: io::Read + io::Write,
+{
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         self.stream.write(buf)
     }

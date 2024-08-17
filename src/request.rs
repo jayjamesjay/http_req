@@ -7,6 +7,7 @@ use crate::{
     uri::Uri,
 };
 use std::{
+    convert::TryFrom,
     fmt,
     io::{BufReader, Write},
     path::Path,
@@ -17,6 +18,7 @@ use std::{
 
 const CR_LF: &str = "\r\n";
 const DEFAULT_REQ_TIMEOUT: u64 = 60 * 60;
+const DEFAULT_CALL_TIMEOUT: u64 = 60;
 
 /// HTTP request methods
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -61,7 +63,7 @@ pub enum HttpVersion {
 }
 
 impl HttpVersion {
-    pub const fn as_str(self) -> &'static str {
+    pub const fn as_str(&self) -> &str {
         use self::HttpVersion::*;
 
         match self {
@@ -78,21 +80,67 @@ impl fmt::Display for HttpVersion {
     }
 }
 
-/// Raw HTTP request that can be sent to any stream
+pub struct RequestBuilder {}
+
+#[deprecated(
+    since = "0.12.0",
+    note = "RequestBuilder was replaced with RequestMessage"
+)]
+impl<'a> RequestBuilder {
+    pub fn new(uri: &'a Uri<'a>) -> RequestMessage<'a> {
+        RequestMessage::new(uri)
+    }
+}
+
+/// Allows to control redirects
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum RedirectPolicy<F> {
+    /// Follows redirect if limit is greater than 0.
+    Limit(usize),
+    /// Runs functions `F` to determine if redirect should be followed.
+    Custom(F),
+}
+
+impl<F: Fn() -> bool> RedirectPolicy<F> {
+    /// Checks the policy againt specified conditions.
+    /// Returns `true` if redirect should be followed.
+    pub fn follow(&mut self) -> bool {
+        use self::RedirectPolicy::*;
+
+        match self {
+            Limit(limit) => match limit {
+                0 => false,
+                _ => {
+                    *limit = *limit - 1;
+                    true
+                }
+            },
+            Custom(func) => func(),
+        }
+    }
+}
+
+impl<F: Fn() -> bool> Default for RedirectPolicy<F> {
+    fn default() -> Self {
+        RedirectPolicy::Limit(5)
+    }
+}
+
+/// Raw HTTP request message that can be sent to any stream
 ///
 /// # Examples
 /// ```
 /// use std::convert::TryFrom;
-/// use http_req::{request::RequestBuilder, uri::Uri};
+/// use http_req::{request::RequestMessage, uri::Uri};
 ///
 /// let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
 ///
-/// let mut request_msg = RequestBuilder::new(&addr)
+/// let mut request_msg = RequestMessage::new(&addr)
 ///      .header("Connection", "Close")
 ///      .parse();
 /// ```
 #[derive(Clone, Debug, PartialEq)]
-pub struct RequestBuilder<'a> {
+pub struct RequestMessage<'a> {
     uri: &'a Uri<'a>,
     method: Method,
     version: HttpVersion,
@@ -100,21 +148,21 @@ pub struct RequestBuilder<'a> {
     body: Option<&'a [u8]>,
 }
 
-impl<'a> RequestBuilder<'a> {
-    /// Creates a new `RequestBuilder` with default parameters
+impl<'a> RequestMessage<'a> {
+    /// Creates a new `RequestMessage` with default parameters
     ///
     /// # Examples
     /// ```
     /// use std::convert::TryFrom;
-    /// use http_req::{request::RequestBuilder, uri::Uri};
+    /// use http_req::{request::RequestMessage, uri::Uri};
     ///
     /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    /// let request_builder = RequestBuilder::new(&addr)
+    /// let request_msg = RequestMessage::new(&addr)
     ///     .header("Connection", "Close");
     /// ```
-    pub fn new(uri: &'a Uri<'a>) -> RequestBuilder<'a> {
-        RequestBuilder {
+    pub fn new(uri: &'a Uri<'a>) -> RequestMessage<'a> {
+        RequestMessage {
             headers: Headers::default_http(uri),
             uri,
             method: Method::GET,
@@ -128,11 +176,11 @@ impl<'a> RequestBuilder<'a> {
     /// # Examples
     /// ```
     /// use std::convert::TryFrom;
-    /// use http_req::{request::{RequestBuilder, Method}, uri::Uri};
+    /// use http_req::{request::{RequestMessage, Method}, uri::Uri};
     ///
     /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    /// let request_builder = RequestBuilder::new(&addr)
+    /// let request_msg = RequestMessage::new(&addr)
     ///     .method(Method::HEAD);
     /// ```
     pub fn method<T>(&mut self, method: T) -> &mut Self
@@ -148,11 +196,11 @@ impl<'a> RequestBuilder<'a> {
     /// # Examples
     /// ```
     /// use std::convert::TryFrom;
-    /// use http_req::{request::{RequestBuilder, HttpVersion}, uri::Uri};
+    /// use http_req::{request::{RequestMessage, HttpVersion}, uri::Uri};
     ///
     /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    /// let request_builder = RequestBuilder::new(&addr)
+    /// let request_msg = RequestMessage::new(&addr)
     ///     .version(HttpVersion::Http10);
     /// ```
     pub fn version<T>(&mut self, version: T) -> &mut Self
@@ -168,7 +216,7 @@ impl<'a> RequestBuilder<'a> {
     /// # Examples
     /// ```
     /// use std::convert::TryFrom;
-    /// use http_req::{request::RequestBuilder, response::Headers, uri::Uri};
+    /// use http_req::{request::RequestMessage, response::Headers, uri::Uri};
     ///
     /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
@@ -178,7 +226,7 @@ impl<'a> RequestBuilder<'a> {
     /// headers.insert("Host", "rust-lang.org");
     /// headers.insert("Connection", "Close");
     ///
-    /// let request_builder = RequestBuilder::new(&addr)
+    /// let request_msg = RequestMessage::new(&addr)
     ///     .headers(headers);
     /// ```
     pub fn headers<T>(&mut self, headers: T) -> &mut Self
@@ -194,11 +242,11 @@ impl<'a> RequestBuilder<'a> {
     /// # Examples
     /// ```
     /// use std::convert::TryFrom;
-    /// use http_req::{request::RequestBuilder, response::Headers, uri::Uri};
+    /// use http_req::{request::RequestMessage, response::Headers, uri::Uri};
     ///
     /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    /// let request_builder = RequestBuilder::new(&addr)
+    /// let request_msg = RequestMessage::new(&addr)
     ///     .header("Connection", "Close");
     /// ```
     pub fn header<T, U>(&mut self, key: &T, val: &U) -> &mut Self
@@ -215,12 +263,12 @@ impl<'a> RequestBuilder<'a> {
     /// # Examples
     /// ```
     /// use std::convert::TryFrom;
-    /// use http_req::{request::{RequestBuilder, Method}, response::Headers, uri::Uri};
+    /// use http_req::{request::{RequestMessage, Method}, response::Headers, uri::Uri};
     ///
     /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     /// const BODY: &[u8; 27] = b"field1=value1&field2=value2";
     ///
-    /// let request_builder = RequestBuilder::new(&addr)
+    /// let request_msg = RequestMessage::new(&addr)
     ///     .method(Method::POST)
     ///     .body(BODY)
     ///     .header("Content-Length", &BODY.len())
@@ -231,16 +279,16 @@ impl<'a> RequestBuilder<'a> {
         self
     }
 
-    /// Parses the request message for this `RequestBuilder`
+    /// Parses the request message for this `RequestMessage`
     ///
     /// # Examples
     /// ```
     /// use std::convert::TryFrom;
-    /// use http_req::{request::RequestBuilder, uri::Uri};
+    /// use http_req::{request::RequestMessage, uri::Uri};
     ///
     /// let addr: Uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
     ///
-    /// let mut request_msg = RequestBuilder::new(&addr)
+    /// let mut request_msg = RequestMessage::new(&addr)
     ///      .header("Connection", "Close")
     ///      .parse();
     /// ```
@@ -261,8 +309,8 @@ impl<'a> RequestBuilder<'a> {
 
         let mut request_msg = (request_line + &headers + CR_LF).as_bytes().to_vec();
 
-        if let Some(b) = &self.body {
-            request_msg.extend(*b);
+        if let Some(b) = self.body {
+            request_msg.extend(b);
         }
 
         request_msg
@@ -288,7 +336,8 @@ impl<'a> RequestBuilder<'a> {
 ///
 #[derive(Clone, Debug, PartialEq)]
 pub struct Request<'a> {
-    inner: RequestBuilder<'a>,
+    messsage: RequestMessage<'a>,
+    redirect_policy: RedirectPolicy<fn() -> bool>,
     connect_timeout: Option<Duration>,
     read_timeout: Option<Duration>,
     write_timeout: Option<Duration>,
@@ -309,14 +358,15 @@ impl<'a> Request<'a> {
     /// let request = Request::new(&uri);
     /// ```
     pub fn new(uri: &'a Uri) -> Request<'a> {
-        let mut builder = RequestBuilder::new(&uri);
-        builder.header("Connection", "Close");
+        let mut message = RequestMessage::new(&uri);
+        message.header("Connection", "Close");
 
         Request {
-            inner: builder,
-            connect_timeout: Some(Duration::from_secs(60)),
-            read_timeout: Some(Duration::from_secs(60)),
-            write_timeout: Some(Duration::from_secs(60)),
+            messsage: message,
+            redirect_policy: RedirectPolicy::default(),
+            connect_timeout: Some(Duration::from_secs(DEFAULT_CALL_TIMEOUT)),
+            read_timeout: Some(Duration::from_secs(DEFAULT_CALL_TIMEOUT)),
+            write_timeout: Some(Duration::from_secs(DEFAULT_CALL_TIMEOUT)),
             timeout: Duration::from_secs(DEFAULT_REQ_TIMEOUT),
             root_cert_file_pem: None,
         }
@@ -338,7 +388,7 @@ impl<'a> Request<'a> {
     where
         Method: From<T>,
     {
-        self.inner.method(method);
+        self.messsage.method(method);
         self
     }
 
@@ -359,7 +409,7 @@ impl<'a> Request<'a> {
     where
         HttpVersion: From<T>,
     {
-        self.inner.version(version);
+        self.messsage.version(version);
         self
     }
 
@@ -385,7 +435,7 @@ impl<'a> Request<'a> {
     where
         Headers: From<T>,
     {
-        self.inner.headers(headers);
+        self.messsage.headers(headers);
         self
     }
 
@@ -406,7 +456,7 @@ impl<'a> Request<'a> {
         T: ToString + ?Sized,
         U: ToString + ?Sized,
     {
-        self.inner.header(key, val);
+        self.messsage.header(key, val);
         self
     }
 
@@ -426,7 +476,7 @@ impl<'a> Request<'a> {
     ///     .body(body);
     /// ```
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
-        self.inner.body(body);
+        self.messsage.body(body);
         self
     }
 
@@ -552,6 +602,26 @@ impl<'a> Request<'a> {
         self
     }
 
+    /// Sets the redirect policy for the request.
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::{request::{Request, RedirectPolicy}, uri::Uri};
+    /// use std::{time::Duration, convert::TryFrom, path::Path};
+    ///
+    /// let uri = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    ///
+    /// let request = Request::new(&uri)
+    ///     .redirect_policy(RedirectPolicy::Limit(5));
+    /// ```
+    pub fn redirect_policy<T>(&mut self, policy: T) -> &mut Self
+    where
+        RedirectPolicy<fn() -> bool>: From<T>,
+    {
+        self.redirect_policy = RedirectPolicy::from(policy);
+        self
+    }
+
     /// Sends the HTTP request and returns `Response`.
     ///
     /// Creates `TcpStream` (and wraps it with `TlsStream` if needed). Writes request message
@@ -567,18 +637,18 @@ impl<'a> Request<'a> {
     ///
     /// let response = Request::new(&uri).send(&mut writer).unwrap();
     /// ```
-    pub fn send<T>(&self, writer: &mut T) -> Result<Response, error::Error>
+    pub fn send<T>(&mut self, writer: &mut T) -> Result<Response, error::Error>
     where
         T: Write,
     {
         // Set up a stream.
-        let mut stream = Stream::new(self.inner.uri, self.connect_timeout)?;
+        let mut stream = Stream::connect(self.messsage.uri, self.connect_timeout)?;
         stream.set_read_timeout(self.read_timeout)?;
         stream.set_write_timeout(self.write_timeout)?;
-        stream = Stream::try_to_https(stream, self.inner.uri, self.root_cert_file_pem)?;
+        stream = Stream::try_to_https(stream, self.messsage.uri, self.root_cert_file_pem)?;
 
         // Send the request message to stream.
-        let request_msg = self.inner.parse();
+        let request_msg = self.messsage.parse();
         stream.write_all(&request_msg)?;
 
         // Set up variables
@@ -592,7 +662,7 @@ impl<'a> Request<'a> {
         thread::spawn(move || {
             buf_reader.send_head(&sender);
 
-            let params: Vec<&str> = receiver_supp.recv().unwrap();
+            let params: Vec<&str> = receiver_supp.recv().unwrap_or(Vec::new());
             if params.contains(&"non-empty") {
                 if params.contains(&"chunked") {
                     let mut buf_reader = ChunkReader::from(buf_reader);
@@ -605,25 +675,28 @@ impl<'a> Request<'a> {
 
         // Receive and process `head` of the response.
         raw_response_head.receive(&receiver, deadline)?;
-
         let response = Response::from_head(&raw_response_head)?;
-        let content_len = response.content_len().unwrap_or(1);
-        let encoding = response.headers().get("Transfer-Encoding");
-        let mut params = Vec::with_capacity(5);
 
-        if let Some(encode) = encoding {
-            if encode == "chunked" {
-                params.push("chunked");
+        if response.status_code().is_redirect() && self.redirect_policy.follow() {
+            if let Some(location) = response.headers().get("Location") {
+                let mut raw_uri = location.to_string();
+                let uri = if Uri::is_relative(&raw_uri) {
+                    self.messsage.uri.from_relative(&mut raw_uri)
+                } else {
+                    Uri::try_from(raw_uri.as_str())
+                }?;
+
+                return Request::new(&uri)
+                    .redirect_policy(self.redirect_policy)
+                    .send(writer);
             }
         }
 
-        if content_len > 0 && self.inner.method != Method::HEAD {
-            params.push("non-empty");
-        }
-
-        sender_supp.send(params).unwrap();
+        let params = response.basic_info(&self.messsage.method).to_vec();
+        sender_supp.send(params)?;
 
         // Receive and process `body` of the response.
+        let content_len = response.content_len().unwrap_or(1);
         if content_len > 0 {
             writer.receive_all(&receiver, deadline)?;
         }
@@ -715,22 +788,22 @@ mod tests {
     }
 
     #[test]
-    fn request_b_new() {
-        RequestBuilder::new(&Uri::try_from(URI).unwrap());
-        RequestBuilder::new(&Uri::try_from(URI_S).unwrap());
+    fn request_m_new() {
+        RequestMessage::new(&Uri::try_from(URI).unwrap());
+        RequestMessage::new(&Uri::try_from(URI_S).unwrap());
     }
 
     #[test]
-    fn request_b_method() {
+    fn request_m_method() {
         let uri = Uri::try_from(URI).unwrap();
-        let mut req = RequestBuilder::new(&uri);
+        let mut req = RequestMessage::new(&uri);
         let req = req.method(Method::HEAD);
 
         assert_eq!(req.method, Method::HEAD);
     }
 
     #[test]
-    fn request_b_headers() {
+    fn request_m_headers() {
         let mut headers = Headers::new();
         headers.insert("Accept-Charset", "utf-8");
         headers.insert("Accept-Language", "en-US");
@@ -738,16 +811,16 @@ mod tests {
         headers.insert("Connection", "Close");
 
         let uri = Uri::try_from(URI).unwrap();
-        let mut req = RequestBuilder::new(&uri);
+        let mut req = RequestMessage::new(&uri);
         let req = req.headers(headers.clone());
 
         assert_eq!(req.headers, headers);
     }
 
     #[test]
-    fn request_b_header() {
+    fn request_m_header() {
         let uri = Uri::try_from(URI).unwrap();
-        let mut req = RequestBuilder::new(&uri);
+        let mut req = RequestMessage::new(&uri);
         let k = "Connection";
         let v = "Close";
 
@@ -761,18 +834,18 @@ mod tests {
     }
 
     #[test]
-    fn request_b_body() {
+    fn request_m_body() {
         let uri = Uri::try_from(URI).unwrap();
-        let mut req = RequestBuilder::new(&uri);
+        let mut req = RequestMessage::new(&uri);
         let req = req.body(&BODY);
 
         assert_eq!(req.body, Some(BODY.as_ref()));
     }
 
     #[test]
-    fn request_b_parse() {
+    fn request_m_parse() {
         let uri = Uri::try_from(URI).unwrap();
-        let req = RequestBuilder::new(&uri);
+        let req = RequestMessage::new(&uri);
 
         const DEFAULT_MSG: &str = "GET /std/string/index.html HTTP/1.1\r\n\
                                    Host: doc.rust-lang.org\r\n\r\n";
@@ -800,7 +873,7 @@ mod tests {
         let mut req = Request::new(&uri);
         req.method(Method::HEAD);
 
-        assert_eq!(req.inner.method, Method::HEAD);
+        assert_eq!(req.messsage.method, Method::HEAD);
     }
 
     #[test]
@@ -815,7 +888,7 @@ mod tests {
         let mut req = Request::new(&uri);
         let req = req.headers(headers.clone());
 
-        assert_eq!(req.inner.headers, headers);
+        assert_eq!(req.messsage.headers, headers);
     }
 
     #[test]
@@ -832,7 +905,7 @@ mod tests {
 
         let req = req.header(k, v);
 
-        assert_eq!(req.inner.headers, expect_headers);
+        assert_eq!(req.messsage.headers, expect_headers);
     }
 
     #[test]
@@ -841,7 +914,7 @@ mod tests {
         let mut req = Request::new(&uri);
         let req = req.body(&BODY);
 
-        assert_eq!(req.inner.body, Some(BODY.as_ref()));
+        assert_eq!(req.messsage.body, Some(BODY.as_ref()));
     }
 
     #[test]

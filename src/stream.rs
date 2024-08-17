@@ -13,6 +13,7 @@ const BUF_SIZE: usize = 16 * 1000;
 
 /// Wrapper around TCP stream for HTTP and HTTPS protocols.
 /// Allows to perform common operations on underlying stream.
+#[derive(Debug)]
 pub enum Stream {
     Http(TcpStream),
     Https(Conn<TcpStream>),
@@ -20,7 +21,16 @@ pub enum Stream {
 
 impl Stream {
     /// Opens a TCP connection to a remote host with a connection timeout (if specified).
+    #[deprecated(
+        since = "0.12.0",
+        note = "Stream::new(uri, connect_timeout) was replaced with Stream::connect(uri, connect_timeout)"
+    )]
     pub fn new(uri: &Uri, connect_timeout: Option<Duration>) -> Result<Stream, Error> {
+        Stream::connect(uri, connect_timeout)
+    }
+
+    /// Opens a TCP connection to a remote host with a connection timeout (if specified).
+    pub fn connect(uri: &Uri, connect_timeout: Option<Duration>) -> Result<Stream, Error> {
         let host = uri.host().unwrap_or("");
         let port = uri.corr_port();
 
@@ -119,7 +129,7 @@ where
 {
     fn send_head(&mut self, sender: &Sender<Vec<u8>>) {
         let buf = read_head(self);
-        sender.send(buf).unwrap();
+        sender.send(buf).unwrap_or(());
     }
 
     fn send_all(&mut self, sender: &Sender<Vec<u8>>) {
@@ -130,7 +140,9 @@ where
                 Ok(0) | Err(_) => break,
                 Ok(len) => {
                     let filled_buf = buf[..len].to_vec();
-                    sender.send(filled_buf).unwrap();
+                    if let Err(_) = sender.send(filled_buf) {
+                        break;
+                    }
                 }
             }
         }
@@ -165,30 +177,18 @@ where
         receiver: &Receiver<Vec<u8>>,
         deadline: Instant,
     ) -> Result<(), Error> {
-        let mut result = Ok(());
-
         execute_with_deadline(deadline, |remaining_time| {
-            let mut is_complete = false;
-
             let data_read = match receiver.recv_timeout(remaining_time) {
                 Ok(data) => data,
-                Err(e) => {
-                    if e == RecvTimeoutError::Timeout {
-                        result = Err(Error::Timeout(RecvTimeoutError::Timeout));
-                    }
-                    return true;
-                }
+                Err(e) => match e {
+                    RecvTimeoutError::Timeout => return Err(Error::Timeout),
+                    RecvTimeoutError::Disconnected => return Ok(true),
+                },
             };
 
-            if let Err(e) = self.write_all(&data_read).map_err(|e| Error::IO(e)) {
-                result = Err(e);
-                is_complete = true;
-            }
-
-            is_complete
-        });
-
-        Ok(result?)
+            self.write_all(&data_read).map_err(|e| Error::IO(e))?;
+            Ok(false)
+        })
     }
 }
 
@@ -226,31 +226,39 @@ where
 /// Exexcutes a function in a loop until operation is completed or deadline is exceeded.
 ///
 /// It checks if a timeout was exceeded every iteration, therefore it limits
-/// how many time a specific function can be called before deadline. 
-/// For the `execute_with_deadline` to meet the deadline, each call 
-/// to `func` needs finish before the deadline. 
-/// 
+/// how many time a specific function can be called before deadline.
+/// For the `execute_with_deadline` to meet the deadline, each call
+/// to `func` needs finish before the deadline.
+///
 /// Key information about function `func`:
 /// - is provided with information about remaining time
 /// - must ensure that its execution will not take more time than specified in `remaining_time`
-/// - needs to return `true` when the operation is complete
-pub fn execute_with_deadline<F>(deadline: Instant, mut func: F)
+/// - needs to return `Some(true)` when the operation is complete, and `Some(false)` - when operation is in progress
+pub fn execute_with_deadline<F>(deadline: Instant, mut func: F) -> Result<(), Error>
 where
-    F: FnMut(Duration) -> bool,
+    F: FnMut(Duration) -> Result<bool, Error>,
 {
     loop {
         let now = Instant::now();
         let remaining_time = deadline - now;
 
-        if deadline < now || func(remaining_time) == true {
-            break;
+        if deadline < now {
+            return Err(Error::Timeout);
+        }
+
+        match func(remaining_time) {
+            Ok(true) => break,
+            Ok(false) => continue,
+            Err(e) => return Err(e),
         }
     }
+
+    Ok(())
 }
 
 /// Reads the head of HTTP response from `reader`.
 ///
-/// Reads from `reader` (line by line) until a blank line is identified, 
+/// Reads from `reader` (line by line) until a blank line is identified,
 /// which indicates that all meta-information has been read,
 pub fn read_head<B>(reader: &mut B) -> Vec<u8>
 where
@@ -297,13 +305,13 @@ mod tests {
     fn stream_new() {
         {
             let uri = Uri::try_from(URI).unwrap();
-            let stream = Stream::new(&uri, None);
+            let stream = Stream::connect(&uri, None);
 
             assert!(stream.is_ok());
         }
         {
             let uri = Uri::try_from(URI).unwrap();
-            let stream = Stream::new(&uri, Some(TIMEOUT));
+            let stream = Stream::connect(&uri, Some(TIMEOUT));
 
             assert!(stream.is_ok());
         }
@@ -313,7 +321,7 @@ mod tests {
     fn stream_try_to_https() {
         {
             let uri = Uri::try_from(URI_S).unwrap();
-            let stream = Stream::new(&uri, None).unwrap();
+            let stream = Stream::connect(&uri, None).unwrap();
             let https_stream = Stream::try_to_https(stream, &uri, None);
 
             assert!(https_stream.is_ok());
@@ -326,7 +334,7 @@ mod tests {
         }
         {
             let uri = Uri::try_from(URI).unwrap();
-            let stream = Stream::new(&uri, None).unwrap();
+            let stream = Stream::connect(&uri, None).unwrap();
             let https_stream = Stream::try_to_https(stream, &uri, None);
 
             assert!(https_stream.is_ok());
@@ -343,7 +351,7 @@ mod tests {
     fn stream_set_read_timeot() {
         {
             let uri = Uri::try_from(URI).unwrap();
-            let mut stream = Stream::new(&uri, None).unwrap();
+            let mut stream = Stream::connect(&uri, None).unwrap();
             stream.set_read_timeout(Some(TIMEOUT)).unwrap();
 
             let inner_read_timeout = if let Stream::Http(inner) = stream {
@@ -356,7 +364,7 @@ mod tests {
         }
         {
             let uri = Uri::try_from(URI_S).unwrap();
-            let mut stream = Stream::new(&uri, None).unwrap();
+            let mut stream = Stream::connect(&uri, None).unwrap();
             stream = Stream::try_to_https(stream, &uri, None).unwrap();
             stream.set_read_timeout(Some(TIMEOUT)).unwrap();
 
@@ -374,7 +382,7 @@ mod tests {
     fn stream_set_write_timeot() {
         {
             let uri = Uri::try_from(URI).unwrap();
-            let mut stream = Stream::new(&uri, None).unwrap();
+            let mut stream = Stream::connect(&uri, None).unwrap();
             stream.set_write_timeout(Some(TIMEOUT)).unwrap();
 
             let inner_read_timeout = if let Stream::Http(inner) = stream {
@@ -387,7 +395,7 @@ mod tests {
         }
         {
             let uri = Uri::try_from(URI_S).unwrap();
-            let mut stream = Stream::new(&uri, None).unwrap();
+            let mut stream = Stream::connect(&uri, None).unwrap();
             stream = Stream::try_to_https(stream, &uri, None).unwrap();
             stream.set_write_timeout(Some(TIMEOUT)).unwrap();
 
@@ -472,17 +480,18 @@ mod tests {
             let star_time = Instant::now();
             let deadline = star_time + TIMEOUT;
 
-            execute_with_deadline(deadline, |_| {
+            let timeout_err = execute_with_deadline(deadline, |_| {
                 let sleep_time = Duration::from_millis(500);
                 thread::sleep(sleep_time);
 
-                false
+                Ok(false)
             });
 
             let end_time = Instant::now();
             let total_time = end_time.duration_since(star_time).as_secs();
 
             assert_eq!(total_time, TIMEOUT.as_secs());
+            assert!(timeout_err.is_err());
         }
         {
             let star_time = Instant::now();
@@ -492,8 +501,9 @@ mod tests {
                 let sleep_time = Duration::from_secs(1);
                 thread::sleep(sleep_time);
 
-                true
-            });
+                Ok(true)
+            })
+            .unwrap();
 
             let end_time = Instant::now();
             let total_time = end_time.duration_since(star_time).as_secs();

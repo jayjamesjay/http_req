@@ -175,7 +175,7 @@ fn is_ascii_space(b: u8) -> bool {
     }
 }
 
-fn parse_hex_uint(data: Vec<u8>) -> Result<usize, &'static str> {
+fn parse_hex_uint<'a>(data: Vec<u8>) -> Result<usize, &'a str> {
     let mut n = 0usize;
     for (i, v) in data.iter().enumerate() {
         if i == 16 {

@@ -80,6 +80,11 @@ pub struct Uri<'a> {
 }
 
 impl<'a> Uri<'a> {
+    /// Returns a reference to the underlying &str.
+    pub fn get_ref(&self) -> &str {
+        self.inner
+    }
+
     /// Returns scheme of this `Uri`.
     ///
     /// # Example
@@ -95,7 +100,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns information about the user included in this `Uri`.
-    ///      
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -109,7 +114,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns host of this `Uri`.
-    ///      
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -123,7 +128,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns host of this `Uri` to use in a header.
-    ///      
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -140,7 +145,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns port of this `Uri`
-    ///      
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -155,7 +160,7 @@ impl<'a> Uri<'a> {
 
     /// Returns port corresponding to this `Uri`.
     /// Returns default port if it hasn't been set in the uri.
-    ///   
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -177,7 +182,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns path of this `Uri`.
-    ///   
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -191,7 +196,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns query of this `Uri`.
-    ///   
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -205,7 +210,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns fragment of this `Uri`.
-    ///   
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -219,7 +224,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Returns resource `Uri` points to.
-    ///   
+    ///
     /// # Example
     /// ```
     /// use http_req::uri::Uri;
@@ -233,6 +238,75 @@ impl<'a> Uri<'a> {
             Some(p) => &self.inner[p.start..],
             None => "/",
         }
+    }
+
+    /// Checks if &str is a relative uri.
+    pub fn is_relative(raw_uri: &str) -> bool {
+        raw_uri.starts_with("/")
+            || raw_uri.starts_with("?")
+            || raw_uri.starts_with("#")
+            || !raw_uri.contains(":")
+    }
+
+    /// Creates a new `Uri` from current uri and relative uri.
+    /// Transforms the relative uri into an absolute uri.
+    pub fn from_relative(&'a self, relative_uri: &'a mut String) -> Result<Uri<'a>, Error> {
+        let inner_uri = self.inner;
+        let mut resource = self.resource().to_string();
+
+        resource = match &relative_uri.get(..1) {
+            Some("#") => Uri::add_part_start(&resource, relative_uri, "#"),
+            Some("?") => Uri::add_part_start(&self.path().unwrap_or("/"), relative_uri, "?"),
+            Some("/") => Uri::add_part_start(&resource, relative_uri, "/"),
+            Some(_) | None => Uri::add_part_end(&resource, relative_uri, "/"),
+        };
+
+        *relative_uri = if let Some(p) = self.path {
+            inner_uri[..p.start].to_string() + &resource
+        } else {
+            inner_uri.trim_end_matches("/").to_string() + &resource
+        };
+
+        Uri::try_from(relative_uri.as_str())
+    }
+
+    /// Adds a part at the beggining of the base.
+    /// Finds the first occurance of a separator in a base and the first occurance of a separator in a part.
+    /// Joins all chars before the separator from the base, separator and all chars after the separator from the part.
+    fn add_part_start(base: &str, part: &str, separator: &str) -> String {
+        let base_idx = base.find(separator);
+        Uri::add_part(base, part, separator, base_idx)
+    }
+
+    /// Adds a part at the end of the base.
+    /// Finds the last occurance of a separator in a base and the first occurance of a separator in a part.
+    /// Joins all chars before the separator from the base, separator and all chars after the separator from the part.
+    fn add_part_end(base: &str, part: &str, separator: &str) -> String {
+        let base_idx = base.rfind(separator);
+        Uri::add_part(base, part, separator, base_idx)
+    }
+
+    /// Adds a part to the base with separator in between.
+    /// Base index defines where part should be added.
+    fn add_part(base: &str, part: &str, separator: &str, base_idx: Option<usize>) -> String {
+        let mut output = String::new();
+        let part_idx = part.find(separator);
+
+        if let Some(idx) = base_idx {
+            output += &base[..idx];
+        } else {
+            output += base;
+        }
+
+        output += separator;
+
+        if let Some(idx) = part_idx {
+            output += &part[idx + 1..];
+        } else {
+            output += part;
+        }
+
+        output
     }
 }
 
@@ -504,6 +578,16 @@ mod tests {
         "[4b10:bbb0:0:d0::ba7:8001]:443",
     ];
 
+    const TEST_PARTS: [&str; 7] = [
+        "?query123",
+        "/path",
+        "#fragment",
+        "other-path",
+        "#paragraph",
+        "./foo/bar/buz",
+        "?users#1551",
+    ];
+
     #[test]
     fn remove_space() {
         let mut text = String::from("Hello World     !");
@@ -719,6 +803,87 @@ mod tests {
 
         for i in 0..RESULT.len() {
             assert_eq!(uris[i].resource(), RESULT[i]);
+        }
+    }
+
+    #[test]
+    fn uri_is_relative() {
+        for i in 0..TEST_URIS.len() {
+            assert!(!Uri::is_relative(TEST_URIS[i]));
+        }
+
+        for i in 0..TEST_PARTS.len() {
+            assert!(Uri::is_relative(TEST_PARTS[i]));
+        }
+    }
+
+    #[test]
+    fn uri_from_relative() {
+        let uris: Vec<_> = TEST_URIS
+            .iter()
+            .map(|&uri| Uri::try_from(uri).unwrap())
+            .collect();
+
+        const RESULT: [&str; 7] = [
+            "https://user:info@foo.com:12/bar/baz?query123",
+            "file:///path",
+            "https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol#fragment",
+            "mailto:John.Doe@example.com/other-path",
+            "https://[4b10:bbb0:0:d0::ba7:8001]:443/#paragraph",
+            "http://example.com/foo/bar/buz",
+            "https://example.com/?users#1551",
+        ];
+
+        for i in 0..RESULT.len() {
+            let mut uri_part = TEST_PARTS[i].to_string();
+
+            println!("{}", uris[i].resource());
+            assert_eq!(
+                uris[i].from_relative(&mut uri_part).unwrap().inner,
+                RESULT[i]
+            );
+        }
+    }
+
+    #[test]
+    fn uri_add_part() {
+        const BASES: [&str; 2] = ["/bar/baz/fizz?query", "/bar/baz?query#some-fragment"];
+        const RESULT: [&str; 2] = [
+            "/bar/baz/fizz?query#another-fragment",
+            "/bar/baz?query#some-fragment#another-fragment",
+        ];
+
+        for i in 0..BASES.len() {
+            assert_eq!(
+                Uri::add_part(BASES[i], "#another-fragment", "#", Some(BASES[i].len())),
+                RESULT[i]
+            );
+        }
+    }
+
+    #[test]
+    fn uri_add_part_start() {
+        const BASES: [&str; 2] = ["/bar/baz/fizz?query", "/bar/baz?query#some-fragment"];
+        const RESULT: [&str; 2] = [
+            "/bar/baz/fizz?query#another-fragment",
+            "/bar/baz?query#another-fragment",
+        ];
+
+        for i in 0..BASES.len() {
+            assert_eq!(
+                Uri::add_part_start(BASES[i], "#another-fragment", "#"),
+                RESULT[i]
+            );
+        }
+    }
+
+    #[test]
+    fn uri_add_part_end() {
+        const BASES: [&str; 2] = ["/bar/baz/fizz?query", "/bar/baz?query#some-fragment"];
+        const RESULT: [&str; 2] = ["/bar/baz/another", "/bar/another"];
+
+        for i in 0..BASES.len() {
+            assert_eq!(Uri::add_part_end(BASES[i], "./another", "/"), RESULT[i]);
         }
     }
 
