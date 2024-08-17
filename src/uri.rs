@@ -255,23 +255,10 @@ impl<'a> Uri<'a> {
         let mut resource = self.resource().to_string();
 
         resource = match &relative_uri.get(..1) {
-            Some("#") => Uri::add_part(&resource, relative_uri, "#"),
-            Some("?") => Uri::add_part(&self.path().unwrap_or("/"), relative_uri, "?"),
-            Some("/") => Uri::add_part(&resource, relative_uri, "/"),
-            Some(_) | None => {
-                let part_idx = resource.rfind("/");
-
-                match part_idx {
-                    Some(idx) => resource[..idx].to_string() + relative_uri,
-                    None => {
-                        if resource.starts_with("/") {
-                            resource.to_string() + relative_uri
-                        } else {
-                            resource.to_string() + "/" + relative_uri
-                        }
-                    }
-                }
-            }
+            Some("#") => Uri::add_part_start(&resource, relative_uri, "#"),
+            Some("?") => Uri::add_part_start(&self.path().unwrap_or("/"), relative_uri, "?"),
+            Some("/") => Uri::add_part_start(&resource, relative_uri, "/"),
+            Some(_) | None => Uri::add_part_end(&resource, relative_uri, "/"),
         };
 
         *relative_uri = if let Some(p) = self.path {
@@ -283,15 +270,43 @@ impl<'a> Uri<'a> {
         Uri::try_from(relative_uri.as_str())
     }
 
-    /// Adds a part to a base at the position definied by a separator.
-    /// If the separator is not found, concatenates 2 strings together.
-    fn add_part(base: &str, part: &str, separator: &str) -> String {
-        let part_idx = base.find(separator);
+    /// Adds a part at the beggining of the base.
+    /// Finds the first occurance of a separator in a base and the first occurance of a separator in a part.
+    /// Joins all chars before the separator from the base, separator and all chars after the separator from the part.
+    fn add_part_start(base: &str, part: &str, separator: &str) -> String {
+        let base_idx = base.find(separator);
+        Uri::add_part(base, part, separator, base_idx)
+    }
 
-        match part_idx {
-            Some(idx) => base[..idx].to_string() + part,
-            None => base.to_string() + part,
+    /// Adds a part at the end of the base.
+    /// Finds the last occurance of a separator in a base and the first occurance of a separator in a part.
+    /// Joins all chars before the separator from the base, separator and all chars after the separator from the part.
+    fn add_part_end(base: &str, part: &str, separator: &str) -> String {
+        let base_idx = base.rfind(separator);
+        Uri::add_part(base, part, separator, base_idx)
+    }
+
+    /// Adds a part to the base with separator in between.
+    /// Base index defines where part should be added.
+    fn add_part(base: &str, part: &str, separator: &str, base_idx: Option<usize>) -> String {
+        let mut output = String::new();
+        let part_idx = part.find(separator);
+
+        if let Some(idx) = base_idx {
+            output += &base[..idx];
+        } else {
+            output += base;
         }
+
+        output += separator;
+
+        if let Some(idx) = part_idx {
+            output += &part[idx + 1..];
+        } else {
+            output += part;
+        }
+
+        output
     }
 }
 
@@ -569,7 +584,7 @@ mod tests {
         "#fragment",
         "other-path",
         "#paragraph",
-        "/foo/bar/buz",
+        "./foo/bar/buz",
         "?users#1551",
     ];
 
@@ -832,11 +847,43 @@ mod tests {
 
     #[test]
     fn uri_add_part() {
-        const BASES: [&str; 2] = ["/bar/baz?query", "/bar/baz?query#some-fragment"];
-        const RESULT: &str = "/bar/baz?query#another-fragment";
+        const BASES: [&str; 2] = ["/bar/baz/fizz?query", "/bar/baz?query#some-fragment"];
+        const RESULT: [&str; 2] = [
+            "/bar/baz/fizz?query#another-fragment",
+            "/bar/baz?query#some-fragment#another-fragment",
+        ];
 
         for i in 0..BASES.len() {
-            assert_eq!(Uri::add_part(BASES[i], "#another-fragment", "#"), RESULT);
+            assert_eq!(
+                Uri::add_part(BASES[i], "#another-fragment", "#", Some(BASES[i].len())),
+                RESULT[i]
+            );
+        }
+    }
+
+    #[test]
+    fn uri_add_part_start() {
+        const BASES: [&str; 2] = ["/bar/baz/fizz?query", "/bar/baz?query#some-fragment"];
+        const RESULT: [&str; 2] = [
+            "/bar/baz/fizz?query#another-fragment",
+            "/bar/baz?query#another-fragment",
+        ];
+
+        for i in 0..BASES.len() {
+            assert_eq!(
+                Uri::add_part_start(BASES[i], "#another-fragment", "#"),
+                RESULT[i]
+            );
+        }
+    }
+
+    #[test]
+    fn uri_add_part_end() {
+        const BASES: [&str; 2] = ["/bar/baz/fizz?query", "/bar/baz?query#some-fragment"];
+        const RESULT: [&str; 2] = ["/bar/baz/another", "/bar/another"];
+
+        for i in 0..BASES.len() {
+            assert_eq!(Uri::add_part_end(BASES[i], "./another", "/"), RESULT[i]);
         }
     }
 

@@ -21,6 +21,15 @@ pub enum Stream {
 
 impl Stream {
     /// Opens a TCP connection to a remote host with a connection timeout (if specified).
+    #[deprecated(
+        since = "0.12.0",
+        note = "Stream::new(uri, connect_timeout) was replaced with Stream::connect(uri, connect_timeout)"
+    )]
+    pub fn new(uri: &Uri, connect_timeout: Option<Duration>) -> Result<Stream, Error> {
+        Stream::connect(uri, connect_timeout)
+    }
+
+    /// Opens a TCP connection to a remote host with a connection timeout (if specified).
     pub fn connect(uri: &Uri, connect_timeout: Option<Duration>) -> Result<Stream, Error> {
         let host = uri.host().unwrap_or("");
         let port = uri.corr_port();
@@ -168,30 +177,18 @@ where
         receiver: &Receiver<Vec<u8>>,
         deadline: Instant,
     ) -> Result<(), Error> {
-        let mut result = Ok(());
-
         execute_with_deadline(deadline, |remaining_time| {
-            let mut is_complete = false;
-
             let data_read = match receiver.recv_timeout(remaining_time) {
                 Ok(data) => data,
-                Err(e) => {
-                    if e == RecvTimeoutError::Timeout {
-                        result = Err(Error::Timeout);
-                    }
-                    return true;
-                }
+                Err(e) => match e {
+                    RecvTimeoutError::Timeout => return Err(Error::Timeout),
+                    RecvTimeoutError::Disconnected => return Ok(true),
+                },
             };
 
-            if let Err(e) = self.write_all(&data_read).map_err(|e| Error::IO(e)) {
-                result = Err(e);
-                is_complete = true;
-            }
-
-            is_complete
-        });
-
-        result
+            self.write_all(&data_read).map_err(|e| Error::IO(e))?;
+            Ok(false)
+        })
     }
 }
 
@@ -236,19 +233,27 @@ where
 /// Key information about function `func`:
 /// - is provided with information about remaining time
 /// - must ensure that its execution will not take more time than specified in `remaining_time`
-/// - needs to return `true` when the operation is complete
-pub fn execute_with_deadline<F>(deadline: Instant, mut func: F)
+/// - needs to return `Some(true)` when the operation is complete, and `Some(false)` - when operation is in progress
+pub fn execute_with_deadline<F>(deadline: Instant, mut func: F) -> Result<(), Error>
 where
-    F: FnMut(Duration) -> bool,
+    F: FnMut(Duration) -> Result<bool, Error>,
 {
     loop {
         let now = Instant::now();
         let remaining_time = deadline - now;
 
-        if deadline < now || func(remaining_time) == true {
-            break;
+        if deadline < now {
+            return Err(Error::Timeout);
+        }
+
+        match func(remaining_time) {
+            Ok(true) => break,
+            Ok(false) => continue,
+            Err(e) => return Err(e),
         }
     }
+
+    Ok(())
 }
 
 /// Reads the head of HTTP response from `reader`.
@@ -475,17 +480,18 @@ mod tests {
             let star_time = Instant::now();
             let deadline = star_time + TIMEOUT;
 
-            execute_with_deadline(deadline, |_| {
+            let timeout_err = execute_with_deadline(deadline, |_| {
                 let sleep_time = Duration::from_millis(500);
                 thread::sleep(sleep_time);
 
-                false
+                Ok(false)
             });
 
             let end_time = Instant::now();
             let total_time = end_time.duration_since(star_time).as_secs();
 
             assert_eq!(total_time, TIMEOUT.as_secs());
+            assert!(timeout_err.is_err());
         }
         {
             let star_time = Instant::now();
@@ -495,8 +501,9 @@ mod tests {
                 let sleep_time = Duration::from_secs(1);
                 thread::sleep(sleep_time);
 
-                true
-            });
+                Ok(true)
+            })
+            .unwrap();
 
             let end_time = Instant::now();
             let total_time = end_time.duration_since(star_time).as_secs();
