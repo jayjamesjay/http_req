@@ -11,6 +11,8 @@ keywords = ["http", "client", "request"]
 edition = "2021"
 
 [dependencies]
+async-net = "2.0.0"
+futures-lite = "2.3.0"
 unicase = "^2.7"
 
 [features]

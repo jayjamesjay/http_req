@@ -21,6 +21,7 @@ pub mod chunked;
 pub mod error;
 pub mod request;
 pub mod response;
+pub mod async_stream;
 pub mod stream;
 pub mod tls;
 pub mod uri;

@@ -10,6 +10,7 @@ use std::{
 #[cfg(feature = "native-tls")]
 use std::io::prelude::*;
 
+use futures_lite::{AsyncRead, AsyncWrite};
 #[cfg(feature = "rust-tls")]
 use rustls::{ClientConnection, StreamOwned};
 #[cfg(feature = "rust-tls")]
@@ -29,6 +30,34 @@ pub struct Conn<S: io::Read + io::Write> {
     #[cfg(feature = "rust-tls")]
     stream: rustls::StreamOwned<rustls::ClientConnection, S>,
 }
+
+/// Wrapper around TLS Stream, depends on selected TLS library:
+/// - native_tls: `TlsStream<S>`
+/// - rustls: `StreamOwned<ClientConnection, S>`
+#[derive(Debug)]
+pub struct AsyncConn<S: AsyncRead + AsyncWrite> {
+    #[cfg(feature = "native-tls")]
+    stream: native_tls::TlsStream<S>,
+
+    #[cfg(feature = "rust-tls")]
+    stream: rustls::StreamOwned<rustls::ClientConnection, S>,
+}
+
+impl<S> AsyncConn<S>
+where
+    S: AsyncRead + AsyncWrite
+{
+    /// Returns a reference to the underlying socket.
+    pub fn get_ref(&self) -> &S {
+        self.stream.get_ref()
+    }
+
+    /// Returns a mutable reference to the underlying socket.
+    pub fn get_mut(&mut self) -> &mut S {
+        self.stream.get_mut()
+    }
+}
+
 
 impl<S> Conn<S>
 where
@@ -152,6 +181,16 @@ impl Config {
         let stream = connector.connect(hostname.as_ref(), stream)?;
 
         Ok(Conn { stream })
+    }
+
+    /// Establishes a secure connection.
+    #[cfg(feature = "native-tls")]
+    pub async fn async_connect<H, S>(&self, hostname: H, stream: S) -> Result<AsyncConn<S>, HttpError>
+    where
+        H: AsRef<str>,
+        S: AsyncRead + AsyncWrite,
+    {
+        todo!()
     }
 
     /// Adds root certificates (X.509) from a PEM file.
