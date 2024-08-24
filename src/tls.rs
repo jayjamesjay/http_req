@@ -1,5 +1,4 @@
 //! secure connection over TLS
-
 use crate::error::Error as HttpError;
 use std::{
     fs::File,

@@ -366,8 +366,9 @@ impl Headers {
     /// let headers = Headers::default_http(&uri);
     /// ```
     pub fn default_http(uri: &Uri) -> Headers {
-        let mut headers = Headers::with_capacity(4);
+        let mut headers = Headers::with_capacity(10);
         headers.insert("Host", &uri.host_header().unwrap_or_default());
+        headers.insert("User-Agent", "http_req/0.13.0");
 
         headers
     }
@@ -826,6 +827,7 @@ mod tests {
 
         let mut headers = Headers::with_capacity(4);
         headers.insert("Host", "doc.rust-lang.org");
+        headers.insert("User-Agent", "http_req/0.13.0");
 
         assert_eq!(Headers::default_http(&uri), headers);
     }

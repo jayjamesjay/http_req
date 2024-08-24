@@ -1,6 +1,10 @@
 //! TCP stream
-
-use crate::{error::Error, tls, tls::Conn, uri::Uri, CR_LF, LF};
+use crate::{
+    error::{Error, ParseErr},
+    tls::{self, Conn},
+    uri::Uri,
+    CR_LF, LF,
+};
 use std::{
     io::{self, BufRead, Read, Write},
     net::{TcpStream, ToSocketAddrs},
@@ -21,17 +25,11 @@ pub enum Stream {
 
 impl Stream {
     /// Opens a TCP connection to a remote host with a connection timeout (if specified).
-    #[deprecated(
-        since = "0.12.0",
-        note = "Stream::new(uri, connect_timeout) was replaced with Stream::connect(uri, connect_timeout)"
-    )]
-    pub fn new(uri: &Uri, connect_timeout: Option<Duration>) -> Result<Stream, Error> {
-        Stream::connect(uri, connect_timeout)
-    }
-
-    /// Opens a TCP connection to a remote host with a connection timeout (if specified).
     pub fn connect(uri: &Uri, connect_timeout: Option<Duration>) -> Result<Stream, Error> {
-        let host = uri.host().unwrap_or("");
+        let host = match uri.host() {
+            Some(h) => h,
+            None => return Err(Error::Parse(ParseErr::UriErr)),
+        };
         let port = uri.corr_port();
 
         let stream = match connect_timeout {
@@ -55,7 +53,10 @@ impl Stream {
         match stream {
             Stream::Http(http_stream) => {
                 if uri.scheme() == "https" {
-                    let host = uri.host().unwrap_or("");
+                    let host = match uri.host() {
+                        Some(h) => h,
+                        None => return Err(Error::Parse(ParseErr::UriErr)),
+                    };
                     let mut cnf = tls::Config::default();
 
                     let cnf = match root_cert_file_pem {

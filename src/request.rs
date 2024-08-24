@@ -17,6 +17,7 @@ use std::{
 };
 
 const CR_LF: &str = "\r\n";
+const DEFAULT_REDIRECT_LIMIT: usize = 5;
 const DEFAULT_REQ_TIMEOUT: u64 = 60 * 60;
 const DEFAULT_CALL_TIMEOUT: u64 = 60;
 
@@ -34,11 +35,11 @@ pub enum Method {
     PATCH,
 }
 
-impl fmt::Display for Method {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Method {
+    pub const fn as_str(&self) -> &str {
         use self::Method::*;
 
-        let method = match self {
+        match self {
             GET => "GET",
             HEAD => "HEAD",
             POST => "POST",
@@ -48,9 +49,13 @@ impl fmt::Display for Method {
             OPTIONS => "OPTIONS",
             TRACE => "TRACE",
             PATCH => "PATCH",
-        };
+        }
+    }
+}
 
-        write!(f, "{}", method)
+impl fmt::Display for Method {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 
@@ -80,18 +85,6 @@ impl fmt::Display for HttpVersion {
     }
 }
 
-pub struct RequestBuilder {}
-
-#[deprecated(
-    since = "0.12.0",
-    note = "RequestBuilder was replaced with RequestMessage"
-)]
-impl<'a> RequestBuilder {
-    pub fn new(uri: &'a Uri<'a>) -> RequestMessage<'a> {
-        RequestMessage::new(uri)
-    }
-}
-
 /// Allows to control redirects
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum RedirectPolicy<F> {
@@ -101,10 +94,14 @@ pub enum RedirectPolicy<F> {
     Custom(F),
 }
 
-impl<F: Fn() -> bool> RedirectPolicy<F> {
+impl<F> RedirectPolicy<F>
+where
+    F: Fn(&str) -> bool,
+{
     /// Checks the policy againt specified conditions.
+    /// `uri` is passed into the function in case of case of `Custom` policy.
     /// Returns `true` if redirect should be followed.
-    pub fn follow(&mut self) -> bool {
+    pub fn follow(&mut self, uri: &str) -> bool {
         use self::RedirectPolicy::*;
 
         match self {
@@ -115,14 +112,17 @@ impl<F: Fn() -> bool> RedirectPolicy<F> {
                     true
                 }
             },
-            Custom(func) => func(),
+            Custom(func) => func(uri),
         }
     }
 }
 
-impl<F: Fn() -> bool> Default for RedirectPolicy<F> {
+impl<F> Default for RedirectPolicy<F>
+where
+    F: Fn(&str) -> bool,
+{
     fn default() -> Self {
-        RedirectPolicy::Limit(5)
+        RedirectPolicy::Limit(DEFAULT_REDIRECT_LIMIT)
     }
 }
 
@@ -270,12 +270,11 @@ impl<'a> RequestMessage<'a> {
     ///
     /// let request_msg = RequestMessage::new(&addr)
     ///     .method(Method::POST)
-    ///     .body(BODY)
-    ///     .header("Content-Length", &BODY.len())
-    ///     .header("Connection", "Close");
+    ///     .body(BODY);
     /// ```
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
         self.body = Some(body);
+        self.header("Content-Length", &body.len());
         self
     }
 
@@ -293,7 +292,7 @@ impl<'a> RequestMessage<'a> {
     ///      .parse();
     /// ```
     pub fn parse(&self) -> Vec<u8> {
-        let request_line = format!(
+        let mut request_msg = format!(
             "{} {} {}{}",
             self.method,
             self.uri.resource(),
@@ -301,14 +300,11 @@ impl<'a> RequestMessage<'a> {
             CR_LF
         );
 
-        let headers: String = self
-            .headers
-            .iter()
-            .map(|(k, v)| format!("{}: {}{}", k, v, CR_LF))
-            .collect();
+        for (key, val) in self.headers.iter() {
+            request_msg = request_msg + key + ": " + val + CR_LF;
+        }
 
-        let mut request_msg = (request_line + &headers + CR_LF).as_bytes().to_vec();
-
+        let mut request_msg = (request_msg + CR_LF).as_bytes().to_vec();
         if let Some(b) = self.body {
             request_msg.extend(b);
         }
@@ -337,7 +333,7 @@ impl<'a> RequestMessage<'a> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Request<'a> {
     messsage: RequestMessage<'a>,
-    redirect_policy: RedirectPolicy<fn() -> bool>,
+    redirect_policy: RedirectPolicy<fn(&str) -> bool>,
     connect_timeout: Option<Duration>,
     read_timeout: Option<Duration>,
     write_timeout: Option<Duration>,
@@ -616,7 +612,7 @@ impl<'a> Request<'a> {
     /// ```
     pub fn redirect_policy<T>(&mut self, policy: T) -> &mut Self
     where
-        RedirectPolicy<fn() -> bool>: From<T>,
+        RedirectPolicy<fn(&str) -> bool>: From<T>,
     {
         self.redirect_policy = RedirectPolicy::from(policy);
         self
@@ -677,18 +673,20 @@ impl<'a> Request<'a> {
         raw_response_head.receive(&receiver, deadline)?;
         let response = Response::from_head(&raw_response_head)?;
 
-        if response.status_code().is_redirect() && self.redirect_policy.follow() {
+        if response.status_code().is_redirect() {
             if let Some(location) = response.headers().get("Location") {
-                let mut raw_uri = location.to_string();
-                let uri = if Uri::is_relative(&raw_uri) {
-                    self.messsage.uri.from_relative(&mut raw_uri)
-                } else {
-                    Uri::try_from(raw_uri.as_str())
-                }?;
+                if self.redirect_policy.follow(&location) {
+                    let mut raw_uri = location.to_string();
+                    let uri = if Uri::is_relative(&raw_uri) {
+                        self.messsage.uri.from_relative(&mut raw_uri)
+                    } else {
+                        Uri::try_from(raw_uri.as_str())
+                    }?;
 
-                return Request::new(&uri)
-                    .redirect_policy(self.redirect_policy)
-                    .send(writer);
+                    return Request::new(&uri)
+                        .redirect_policy(self.redirect_policy)
+                        .send(writer);
+                }
             }
         }
 
@@ -765,7 +763,6 @@ where
 
     Request::new(&uri)
         .method(Method::POST)
-        .header("Content-Length", &body.len())
         .body(body)
         .send(writer)
 }
@@ -826,6 +823,7 @@ mod tests {
 
         let mut expect_headers = Headers::new();
         expect_headers.insert("Host", "doc.rust-lang.org");
+        expect_headers.insert("User-Agent", "http_req/0.13.0");
         expect_headers.insert(k, v);
 
         let req = req.header(k, v);
@@ -848,7 +846,8 @@ mod tests {
         let req = RequestMessage::new(&uri);
 
         const DEFAULT_MSG: &str = "GET /std/string/index.html HTTP/1.1\r\n\
-                                   Host: doc.rust-lang.org\r\n\r\n";
+                                   Host: doc.rust-lang.org\r\n\
+                                   User-Agent: http_req/0.13.0\r\n\r\n";
         let msg = req.parse();
         let msg = String::from_utf8_lossy(&msg).into_owned();
 
@@ -901,6 +900,7 @@ mod tests {
         let mut expect_headers = Headers::new();
         expect_headers.insert("Host", "doc.rust-lang.org");
         expect_headers.insert("Connection", "Close");
+        expect_headers.insert("User-Agent", "http_req/0.13.0");
         expect_headers.insert(k, v);
 
         let req = req.header(k, v);
