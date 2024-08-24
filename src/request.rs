@@ -1,19 +1,11 @@
 //! creating and sending HTTP requests
+use futures_lite::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
+
 use crate::{
-    chunked::ChunkReader,
-    error,
-    response::{Headers, Response},
-    stream::{Stream, ThreadReceive, ThreadSend},
-    uri::Uri,
+    async_stream::{AsyncStream, AsyncThreadReceive, AsyncThreadSend}, chunked::ChunkReader, error, response::{Headers, Response}, stream::{Stream, ThreadReceive, ThreadSend}, uri::Uri
 };
 use std::{
-    convert::TryFrom,
-    fmt,
-    io::{BufReader, Write},
-    path::Path,
-    sync::mpsc,
-    thread,
-    time::{Duration, Instant},
+    convert::TryFrom, fmt, io::{BufReader, Write}, path::Path, sync::mpsc, thread, time::{Duration, Instant}
 };
 
 const CR_LF: &str = "\r\n";
@@ -699,6 +691,73 @@ impl<'a> Request<'a> {
         let content_len = response.content_len().unwrap_or(1);
         if content_len > 0 {
             writer.receive_all(&receiver, deadline)?;
+        }
+
+        Ok(response)
+    }
+
+    pub async fn async_send<T>(&mut self, writer: &mut T) -> Result<Response, error::Error>
+    where
+        T: AsyncWrite + AsyncRead + AsyncThreadReceive + AsyncThreadSend,
+    {
+        // Set up a stream.
+        let mut stream = AsyncStream::connect(self.messsage.uri, self.connect_timeout).await?;
+        stream.set_read_timeout(self.read_timeout)?;
+        stream.set_write_timeout(self.write_timeout)?;
+        stream = AsyncStream::try_to_https(stream, self.messsage.uri, self.root_cert_file_pem).await?;
+
+        // Send the request message to stream.
+        let request_msg = self.messsage.parse();
+        stream.write_all(&request_msg).await?;
+
+        // Set up variables
+        let deadline = Instant::now() + self.timeout;
+        let (sender, receiver) = mpsc::channel();
+        let (sender_supp, receiver_supp) = mpsc::channel();
+        let mut raw_response_head: Vec<u8> = Vec::new();
+        let mut buf_reader = futures_lite::io::BufReader::new(stream);
+
+        // Read from the stream and send over data via `sender`.
+        buf_reader.async_send_head(&sender).await;
+
+        let params: Vec<&str> = receiver_supp.recv().unwrap_or(Vec::new());
+        if params.contains(&"non-empty") {
+            if params.contains(&"chunked") {
+                // TODO: async chunked reader
+                todo!()
+            } else {
+                buf_reader.async_send_all(&sender);
+            }
+        }
+
+        // Receive and process `head` of the response.
+        raw_response_head.receive(&receiver, deadline)?;
+        let response = Response::from_head(&raw_response_head)?;
+
+        if response.status_code().is_redirect() && self.redirect_policy.follow() {
+            if let Some(location) = response.headers().get("Location") {
+                let mut raw_uri = location.to_string();
+                let uri = if Uri::is_relative(&raw_uri) {
+                    self.messsage.uri.from_relative(&mut raw_uri)
+                } else {
+                    Uri::try_from(raw_uri.as_str())
+                }?;
+
+                // Use `Box::pin` here to handle recursion
+                return Box::pin(Request::new(&uri)
+                    .redirect_policy(self.redirect_policy)
+                    .async_send(writer))
+                    .await;
+            }
+        }
+
+        let params = response.basic_info(&self.messsage.method).to_vec();
+        sender_supp.send(params)?;
+
+        // Receive and process `body` of the response.
+        let content_len = response.content_len().unwrap_or(1);
+        if content_len > 0 {
+            writer.async_receive_all(&receiver, deadline).await?;
         }
 
         Ok(response)
