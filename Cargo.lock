@@ -214,6 +214,7 @@ dependencies = [
 name = "http_req"
 version = "0.13.0"
 dependencies = [
+ "base64",
  "native-tls",
  "rustls",
  "rustls-pemfile",
@@ -221,6 +222,7 @@ dependencies = [
  "unicase",
  "webpki",
  "webpki-roots",
+ "zeroize",
 ]
 
 [[package]]
