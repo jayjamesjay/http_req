@@ -38,6 +38,15 @@ pub enum Method {
 }
 
 impl Method {
+    /// Returns a string representation of a HTTP request method.
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::request::Method;
+    ///
+    /// let method = Method::GET;
+    /// assert_eq!(method.as_str(), "GET");
+    /// ```
     pub const fn as_str(&self) -> &str {
         use self::Method::*;
 
@@ -70,6 +79,15 @@ pub enum HttpVersion {
 }
 
 impl HttpVersion {
+    /// Returns a string representation of a HTTP version.
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::request::HttpVersion;
+    ///
+    /// let version = HttpVersion::Http10;
+    /// assert_eq!(version.as_str(), "HTTP/1.0");
+    /// ```
     pub const fn as_str(&self) -> &str {
         use self::HttpVersion::*;
 
@@ -95,6 +113,13 @@ pub struct Authentication(AuthenticationType);
 
 impl Authentication {
     /// Creates a new `Authentication` of type `Basic`.
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::request::Authentication;
+    ///
+    /// let auth = Authentication::basic("foo", "bar");
+    /// ```
     pub fn basic<T, U>(username: &T, password: &U) -> Authentication
     where
         T: ToString + ?Sized,
@@ -107,6 +132,13 @@ impl Authentication {
     }
 
     /// Creates a new `Authentication` of type `Bearer`
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::request::Authentication;
+    ///
+    /// let auth = Authentication::bearer("secret_token");
+    /// ```
     pub fn bearer<T>(token: &T) -> Authentication
     where
         T: ToString + ?Sized,
@@ -117,6 +149,17 @@ impl Authentication {
     /// Generates a HTTP Authorization header. Returns `key` & `value` pair.
     /// - Basic: uses base64 encoding on provided credentials
     /// - Bearer: uses token as is
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::request::Authentication;
+    ///
+    /// let auth = Authentication::bearer("secretToken");
+    /// let (key, val) = auth.header();
+    ///
+    /// assert_eq!(key, "Authorization");
+    /// assert_eq!(val, "Bearer secretToken");
+    /// ```
     pub fn header(&self) -> (String, String) {
         let key = "Authorization".to_string();
         let val = String::with_capacity(200) + self.0.scheme() + " " + &self.0.credentials();
@@ -173,9 +216,22 @@ impl<F> RedirectPolicy<F>
 where
     F: Fn(&str) -> bool,
 {
-    /// Checks the policy againt specified conditions.
-    /// `uri` is passed into the function in case of case of `Custom` policy.
-    /// Returns `true` if redirect should be followed.
+    /// Checks the policy againt specified conditions:
+    /// - Limit - checks if limit is greater than 0
+    /// - Custom - runs functions `F` passing `uri` as parameter and returns its output
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::request::RedirectPolicy;
+    ///
+    /// let uri: &str = "https://www.rust-lang.org/learn";
+    ///
+    /// let mut policy_1: RedirectPolicy<fn(&str) -> bool> = RedirectPolicy::Limit(5);
+    /// assert_eq!(policy_1.follow(&uri), true);
+    ///
+    /// let mut policy_2: RedirectPolicy<fn(&str) -> bool> = RedirectPolicy::Custom(|uri| false);
+    /// assert_eq!(policy_2.follow(&uri), false);
+    /// ```
     pub fn follow(&mut self, uri: &str) -> bool {
         use self::RedirectPolicy::*;
 
