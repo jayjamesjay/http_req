@@ -355,6 +355,24 @@ impl Headers {
         self.0.insert(Ascii::new(key.to_string()), val.to_string())
     }
 
+    /// Inserts key-value pair into the headers and takes ownership over them.
+    ///
+    /// If the headers did not have this key present, None is returned.
+    ///
+    /// If the headers did have this key present, the value is updated, and the old value is returned.
+    /// The key is not updated, though; this matters for types that can be == without being identical.
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::response::Headers;
+    ///
+    /// let mut headers = Headers::new();
+    /// headers.insert_raw("Accept-Language".to_string(), "en-US".to_string());
+    /// ```
+    pub fn insert_raw(&mut self, key: String, val: String) -> Option<String> {
+        self.0.insert(Ascii::new(key), val)
+    }
+
     /// Creates default headers for a HTTP request
     ///
     /// # Examples
@@ -366,8 +384,9 @@ impl Headers {
     /// let headers = Headers::default_http(&uri);
     /// ```
     pub fn default_http(uri: &Uri) -> Headers {
-        let mut headers = Headers::with_capacity(4);
+        let mut headers = Headers::with_capacity(10);
         headers.insert("Host", &uri.host_header().unwrap_or_default());
+        headers.insert("User-Agent", "http_req/0.13.0");
 
         headers
     }
@@ -826,6 +845,7 @@ mod tests {
 
         let mut headers = Headers::with_capacity(4);
         headers.insert("Host", "doc.rust-lang.org");
+        headers.insert("User-Agent", "http_req/0.13.0");
 
         assert_eq!(Headers::default_http(&uri), headers);
     }

@@ -1,23 +1,25 @@
 # http_req
-> [!CAUTION]
-> v0.12.0 replaces `RequestBuilder` with `RequestMessage`. Please review [documentation](https://docs.rs/http_req/0.12.0/http_req/) before migrating from previous versions.
 
 [![Rust](https://github.com/jayjamesjay/http_req/actions/workflows/rust.yml/badge.svg)](https://github.com/jayjamesjay/http_req/actions/workflows/rust.yml)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.12.0-orange.svg?longCache=true)](https://crates.io/crates/http_req)
-[![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.12.0/http_req/)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.13.0-orange.svg?longCache=true)](https://crates.io/crates/http_req)
+[![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.13.0/http_req/)
 
 Simple and lightweight HTTP client with built-in HTTPS support.
+
 - HTTP and HTTPS via [rust-native-tls](https://github.com/sfackler/rust-native-tls) (or optionally [rus-tls](https://crates.io/crates/rustls))
-- Small binary size (less than 0.7 MB for basic GET request)
+- Small binary size (0.7 MB for basic GET request in default configuration)
 - Minimal amount of dependencies
 
 ## Requirements
+
 http_req by default uses [rust-native-tls](https://github.com/sfackler/rust-native-tls),
 which relies on TLS framework provided by OS on Windows and macOS, and OpenSSL
 on all other platforms. But it also supports [rus-tls](https://crates.io/crates/rustls).
 
 ## Example
+
 Basic HTTP GET request
+
 ```rust
 use http_req::request;
 
@@ -31,12 +33,26 @@ fn main() {
 
 Take a look at [more examples](https://github.com/jayjamesjay/http_req/tree/master/examples)
 
-## How to use with `rustls`:
-In order to use `http_req` with `rustls` in your project, add the following lines to `Cargo.toml`:
+## Usage
+
+### Default configuration
+
+In order to use `http_req` with default configuration, add the following lines to `Cargo.toml`:
+
 ```toml
 [dependencies]
-http_req  = {version="^0.12", default-features = false, features = ["rust-tls"]}
+http_req = "^0.13"
+```
+
+### Rustls
+
+In order to use `http_req` with `rustls` in your project, add the following lines to `Cargo.toml`:
+
+```toml
+[dependencies]
+http_req = { version="^0.13", default-features = false, features = ["rust-tls"] }
 ```
 
 ## License
+
 Licensed under [MIT](https://github.com/jayjamesjay/http_req/blob/master/LICENSE).

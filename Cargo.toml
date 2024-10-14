@@ -1,6 +1,6 @@
 [package]
 name = "http_req"
-version = "0.12.0"
+version = "0.13.0"
 license = "MIT"
 description = "simple and lightweight HTTP client with built-in HTTPS support"
 repository = "https://github.com/jayjamesjay/http_req"
@@ -12,6 +12,14 @@ edition = "2021"
 
 [dependencies]
 unicase = "^2.7"
+base64 = "^0.22.1"
+zeroize = { version = "^1.8.1", features = ["zeroize_derive"] }
+native-tls = { version = "^0.2", optional = true }
+rustls = { version = "^0.23", optional = true }
+rustls-pemfile = { version = "^2.1", optional = true }
+rustls-pki-types = { version = "^1.7", features = ["alloc"], optional = true }
+webpki = { version = "^0.22", optional = true }
+webpki-roots = { version = "^0.26", optional = true }
 
 [features]
 default = ["native-tls"]
@@ -22,28 +30,3 @@ rust-tls = [
     "webpki-roots",
     "rustls-pemfile",
 ]
-
-[dependencies.native-tls]
-version = "^0.2"
-optional = true
-
-[dependencies.rustls]
-version = "^0.23"
-optional = true
-
-[dependencies.rustls-pemfile]
-version = "^2.1"
-optional = true
-
-[dependencies.webpki]
-version = "^0.22"
-optional = true
-
-[dependencies.webpki-roots]
-version = "^0.26"
-optional = true
-
-[dependencies.rustls-pki-types]
-version = "^1.7"
-features = ["alloc"]
-optional = true

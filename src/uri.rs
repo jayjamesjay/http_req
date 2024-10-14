@@ -249,7 +249,7 @@ impl<'a> Uri<'a> {
     }
 
     /// Creates a new `Uri` from current uri and relative uri.
-    /// Transforms the relative uri into an absolute uri.
+    /// Writes the new uri (raw string) into `relative_uri`.
     pub fn from_relative(&'a self, relative_uri: &'a mut String) -> Result<Uri<'a>, Error> {
         let inner_uri = self.inner;
         let mut resource = self.resource().to_string();

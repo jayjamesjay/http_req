@@ -6,6 +6,7 @@ use crate::{
     stream::{Stream, ThreadReceive, ThreadSend},
     uri::Uri,
 };
+use base64::engine::{general_purpose::URL_SAFE, Engine};
 use std::{
     convert::TryFrom,
     fmt,
@@ -15,8 +16,10 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 const CR_LF: &str = "\r\n";
+const DEFAULT_REDIRECT_LIMIT: usize = 5;
 const DEFAULT_REQ_TIMEOUT: u64 = 60 * 60;
 const DEFAULT_CALL_TIMEOUT: u64 = 60;
 
@@ -34,11 +37,20 @@ pub enum Method {
     PATCH,
 }
 
-impl fmt::Display for Method {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl Method {
+    /// Returns a string representation of a HTTP request method.
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::request::Method;
+    ///
+    /// let method = Method::GET;
+    /// assert_eq!(method.as_str(), "GET");
+    /// ```
+    pub const fn as_str(&self) -> &str {
         use self::Method::*;
 
-        let method = match self {
+        match self {
             GET => "GET",
             HEAD => "HEAD",
             POST => "POST",
@@ -48,9 +60,13 @@ impl fmt::Display for Method {
             OPTIONS => "OPTIONS",
             TRACE => "TRACE",
             PATCH => "PATCH",
-        };
+        }
+    }
+}
 
-        write!(f, "{}", method)
+impl fmt::Display for Method {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 
@@ -63,6 +79,15 @@ pub enum HttpVersion {
 }
 
 impl HttpVersion {
+    /// Returns a string representation of a HTTP version.
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::request::HttpVersion;
+    ///
+    /// let version = HttpVersion::Http10;
+    /// assert_eq!(version.as_str(), "HTTP/1.0");
+    /// ```
     pub const fn as_str(&self) -> &str {
         use self::HttpVersion::*;
 
@@ -80,15 +105,101 @@ impl fmt::Display for HttpVersion {
     }
 }
 
-pub struct RequestBuilder {}
+/// Authentication details:
+/// - Basic: username and password
+/// - Bearer: token
+#[derive(Debug, PartialEq, Zeroize, ZeroizeOnDrop)]
+pub struct Authentication(AuthenticationType);
 
-#[deprecated(
-    since = "0.12.0",
-    note = "RequestBuilder was replaced with RequestMessage"
-)]
-impl<'a> RequestBuilder {
-    pub fn new(uri: &'a Uri<'a>) -> RequestMessage<'a> {
-        RequestMessage::new(uri)
+impl Authentication {
+    /// Creates a new `Authentication` of type `Basic`.
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::request::Authentication;
+    ///
+    /// let auth = Authentication::basic("foo", "bar");
+    /// ```
+    pub fn basic<T, U>(username: &T, password: &U) -> Authentication
+    where
+        T: ToString + ?Sized,
+        U: ToString + ?Sized,
+    {
+        Authentication(AuthenticationType::Basic {
+            username: username.to_string(),
+            password: password.to_string(),
+        })
+    }
+
+    /// Creates a new `Authentication` of type `Bearer`
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::request::Authentication;
+    ///
+    /// let auth = Authentication::bearer("secret_token");
+    /// ```
+    pub fn bearer<T>(token: &T) -> Authentication
+    where
+        T: ToString + ?Sized,
+    {
+        Authentication(AuthenticationType::Bearer(token.to_string()))
+    }
+
+    /// Generates a HTTP Authorization header. Returns `key` & `value` pair.
+    /// - Basic: uses base64 encoding on provided credentials
+    /// - Bearer: uses token as is
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::request::Authentication;
+    ///
+    /// let auth = Authentication::bearer("secretToken");
+    /// let (key, val) = auth.header();
+    ///
+    /// assert_eq!(key, "Authorization");
+    /// assert_eq!(val, "Bearer secretToken");
+    /// ```
+    pub fn header(&self) -> (String, String) {
+        let key = "Authorization".to_string();
+        let val = String::with_capacity(200) + self.0.scheme() + " " + &self.0.credentials();
+
+        (key, val)
+    }
+}
+
+/// Authentication types
+#[derive(Debug, PartialEq, Zeroize, ZeroizeOnDrop)]
+enum AuthenticationType {
+    Basic { username: String, password: String },
+    Bearer(String),
+}
+
+impl AuthenticationType {
+    /// Returns scheme
+    const fn scheme(&self) -> &str {
+        use AuthenticationType::*;
+
+        match self {
+            Basic {
+                username: _,
+                password: _,
+            } => "Basic",
+            Bearer(_) => "Bearer",
+        }
+    }
+
+    /// Returns encoded credentials
+    fn credentials(&self) -> Zeroizing<String> {
+        use AuthenticationType::*;
+
+        match self {
+            Basic { username, password } => {
+                let credentials = Zeroizing::new(username.to_string() + ":" + password);
+                Zeroizing::new(URL_SAFE.encode(credentials.as_bytes()))
+            }
+            Bearer(token) => Zeroizing::new(token.to_string()),
+        }
     }
 }
 
@@ -101,10 +212,27 @@ pub enum RedirectPolicy<F> {
     Custom(F),
 }
 
-impl<F: Fn() -> bool> RedirectPolicy<F> {
-    /// Checks the policy againt specified conditions.
-    /// Returns `true` if redirect should be followed.
-    pub fn follow(&mut self) -> bool {
+impl<F> RedirectPolicy<F>
+where
+    F: Fn(&str) -> bool,
+{
+    /// Checks the policy againt specified conditions:
+    /// - Limit - checks if limit is greater than 0
+    /// - Custom - runs functions `F` passing `uri` as parameter and returns its output
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::request::RedirectPolicy;
+    ///
+    /// let uri: &str = "https://www.rust-lang.org/learn";
+    ///
+    /// let mut policy_1: RedirectPolicy<fn(&str) -> bool> = RedirectPolicy::Limit(5);
+    /// assert_eq!(policy_1.follow(&uri), true);
+    ///
+    /// let mut policy_2: RedirectPolicy<fn(&str) -> bool> = RedirectPolicy::Custom(|uri| false);
+    /// assert_eq!(policy_2.follow(&uri), false);
+    /// ```
+    pub fn follow(&mut self, uri: &str) -> bool {
         use self::RedirectPolicy::*;
 
         match self {
@@ -115,14 +243,17 @@ impl<F: Fn() -> bool> RedirectPolicy<F> {
                     true
                 }
             },
-            Custom(func) => func(),
+            Custom(func) => func(uri),
         }
     }
 }
 
-impl<F: Fn() -> bool> Default for RedirectPolicy<F> {
+impl<F> Default for RedirectPolicy<F>
+where
+    F: Fn(&str) -> bool,
+{
     fn default() -> Self {
-        RedirectPolicy::Limit(5)
+        RedirectPolicy::Limit(DEFAULT_REDIRECT_LIMIT)
     }
 }
 
@@ -258,6 +389,29 @@ impl<'a> RequestMessage<'a> {
         self
     }
 
+    /// Adds an authorization header to existing headers
+    ///
+    /// # Examples
+    /// ```
+    /// use std::convert::TryFrom;
+    /// use http_req::{request::{RequestMessage, Authentication}, response::Headers, uri::Uri};
+    ///
+    /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    ///
+    /// let request_msg = RequestMessage::new(&addr)
+    ///     .authentication(Authentication::bearer("secret456token123"));
+    /// ```
+    pub fn authentication<T>(&mut self, auth: T) -> &mut Self
+    where
+        Authentication: From<T>,
+    {
+        let auth = Authentication::from(auth);
+        let (key, val) = auth.header();
+
+        self.headers.insert_raw(key, val);
+        self
+    }
+
     /// Sets the body for request
     ///
     /// # Examples
@@ -270,12 +424,11 @@ impl<'a> RequestMessage<'a> {
     ///
     /// let request_msg = RequestMessage::new(&addr)
     ///     .method(Method::POST)
-    ///     .body(BODY)
-    ///     .header("Content-Length", &BODY.len())
-    ///     .header("Connection", "Close");
+    ///     .body(BODY);
     /// ```
     pub fn body(&mut self, body: &'a [u8]) -> &mut Self {
         self.body = Some(body);
+        self.header("Content-Length", &body.len());
         self
     }
 
@@ -293,7 +446,7 @@ impl<'a> RequestMessage<'a> {
     ///      .parse();
     /// ```
     pub fn parse(&self) -> Vec<u8> {
-        let request_line = format!(
+        let mut request_msg = format!(
             "{} {} {}{}",
             self.method,
             self.uri.resource(),
@@ -301,14 +454,11 @@ impl<'a> RequestMessage<'a> {
             CR_LF
         );
 
-        let headers: String = self
-            .headers
-            .iter()
-            .map(|(k, v)| format!("{}: {}{}", k, v, CR_LF))
-            .collect();
+        for (key, val) in self.headers.iter() {
+            request_msg = request_msg + key + ": " + val + CR_LF;
+        }
 
-        let mut request_msg = (request_line + &headers + CR_LF).as_bytes().to_vec();
-
+        let mut request_msg = (request_msg + CR_LF).as_bytes().to_vec();
         if let Some(b) = self.body {
             request_msg.extend(b);
         }
@@ -337,7 +487,7 @@ impl<'a> RequestMessage<'a> {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Request<'a> {
     messsage: RequestMessage<'a>,
-    redirect_policy: RedirectPolicy<fn() -> bool>,
+    redirect_policy: RedirectPolicy<fn(&str) -> bool>,
     connect_timeout: Option<Duration>,
     read_timeout: Option<Duration>,
     write_timeout: Option<Duration>,
@@ -457,6 +607,26 @@ impl<'a> Request<'a> {
         U: ToString + ?Sized,
     {
         self.messsage.header(key, val);
+        self
+    }
+
+    /// Adds an authorization header to existing headers.
+    ///
+    /// # Examples
+    /// ```
+    /// use std::convert::TryFrom;
+    /// use http_req::{request::{RequestMessage, Authentication}, response::Headers, uri::Uri};
+    ///
+    /// let addr = Uri::try_from("https://www.rust-lang.org/learn").unwrap();
+    ///
+    /// let request_msg = RequestMessage::new(&addr)
+    ///     .authentication(Authentication::bearer("secret456token123"));
+    /// ```
+    pub fn authentication<T>(&mut self, auth: T) -> &mut Self
+    where
+        Authentication: From<T>,
+    {
+        self.messsage.authentication(auth);
         self
     }
 
@@ -616,7 +786,7 @@ impl<'a> Request<'a> {
     /// ```
     pub fn redirect_policy<T>(&mut self, policy: T) -> &mut Self
     where
-        RedirectPolicy<fn() -> bool>: From<T>,
+        RedirectPolicy<fn(&str) -> bool>: From<T>,
     {
         self.redirect_policy = RedirectPolicy::from(policy);
         self
@@ -677,18 +847,20 @@ impl<'a> Request<'a> {
         raw_response_head.receive(&receiver, deadline)?;
         let response = Response::from_head(&raw_response_head)?;
 
-        if response.status_code().is_redirect() && self.redirect_policy.follow() {
+        if response.status_code().is_redirect() {
             if let Some(location) = response.headers().get("Location") {
-                let mut raw_uri = location.to_string();
-                let uri = if Uri::is_relative(&raw_uri) {
-                    self.messsage.uri.from_relative(&mut raw_uri)
-                } else {
-                    Uri::try_from(raw_uri.as_str())
-                }?;
+                if self.redirect_policy.follow(&location) {
+                    let mut raw_uri = location.to_string();
+                    let uri = if Uri::is_relative(&raw_uri) {
+                        self.messsage.uri.from_relative(&mut raw_uri)
+                    } else {
+                        Uri::try_from(raw_uri.as_str())
+                    }?;
 
-                return Request::new(&uri)
-                    .redirect_policy(self.redirect_policy)
-                    .send(writer);
+                    return Request::new(&uri)
+                        .redirect_policy(self.redirect_policy)
+                        .send(writer);
+                }
             }
         }
 
@@ -765,7 +937,6 @@ where
 
     Request::new(&uri)
         .method(Method::POST)
-        .header("Content-Length", &body.len())
         .body(body)
         .send(writer)
 }
@@ -785,6 +956,43 @@ mod tests {
     fn method_display() {
         const METHOD: Method = Method::HEAD;
         assert_eq!(&format!("{}", METHOD), "HEAD");
+    }
+
+    #[test]
+    fn authentication_basic() {
+        let auth = Authentication::basic("user", "password123");
+        assert_eq!(
+            auth,
+            Authentication(AuthenticationType::Basic {
+                username: "user".to_string(),
+                password: "password123".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn authentication_baerer() {
+        let auth = Authentication::bearer("456secret123token");
+        assert_eq!(
+            auth,
+            Authentication(AuthenticationType::Bearer("456secret123token".to_string()))
+        );
+    }
+
+    #[test]
+    fn authentication_header() {
+        {
+            let auth = Authentication::basic("user", "password123");
+            let (key, val) = auth.header();
+            assert_eq!(key, "Authorization".to_string());
+            assert_eq!(val, "Basic dXNlcjpwYXNzd29yZDEyMw==".to_string());
+        }
+        {
+            let auth = Authentication::bearer("456secret123token");
+            let (key, val) = auth.header();
+            assert_eq!(key, "Authorization".to_string());
+            assert_eq!(val, "Bearer 456secret123token".to_string());
+        }
     }
 
     #[test]
@@ -826,9 +1034,28 @@ mod tests {
 
         let mut expect_headers = Headers::new();
         expect_headers.insert("Host", "doc.rust-lang.org");
+        expect_headers.insert("User-Agent", "http_req/0.13.0");
         expect_headers.insert(k, v);
 
         let req = req.header(k, v);
+
+        assert_eq!(req.headers, expect_headers);
+    }
+
+    #[test]
+    fn request_m_authentication() {
+        let uri = Uri::try_from(URI).unwrap();
+        let mut req = RequestMessage::new(&uri);
+        let token = "456secret123token";
+        let k = "Authorization";
+        let v = "Bearer ".to_string() + token;
+
+        let mut expect_headers = Headers::new();
+        expect_headers.insert("Host", "doc.rust-lang.org");
+        expect_headers.insert("User-Agent", "http_req/0.13.0");
+        expect_headers.insert(k, &v);
+
+        let req = req.authentication(Authentication::bearer(token));
 
         assert_eq!(req.headers, expect_headers);
     }
@@ -848,7 +1075,8 @@ mod tests {
         let req = RequestMessage::new(&uri);
 
         const DEFAULT_MSG: &str = "GET /std/string/index.html HTTP/1.1\r\n\
-                                   Host: doc.rust-lang.org\r\n\r\n";
+                                   Host: doc.rust-lang.org\r\n\
+                                   User-Agent: http_req/0.13.0\r\n\r\n";
         let msg = req.parse();
         let msg = String::from_utf8_lossy(&msg).into_owned();
 
@@ -901,6 +1129,7 @@ mod tests {
         let mut expect_headers = Headers::new();
         expect_headers.insert("Host", "doc.rust-lang.org");
         expect_headers.insert("Connection", "Close");
+        expect_headers.insert("User-Agent", "http_req/0.13.0");
         expect_headers.insert(k, v);
 
         let req = req.header(k, v);
