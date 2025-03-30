@@ -6,7 +6,7 @@ use crate::{
     stream::{Stream, ThreadReceive, ThreadSend},
     uri::Uri,
 };
-use base64::engine::{general_purpose::URL_SAFE, Engine};
+use base64::prelude::*;
 use std::{
     convert::TryFrom,
     fmt,
@@ -196,7 +196,7 @@ impl AuthenticationType {
         match self {
             Basic { username, password } => {
                 let credentials = Zeroizing::new(username.to_string() + ":" + password);
-                Zeroizing::new(URL_SAFE.encode(credentials.as_bytes()))
+                Zeroizing::new(BASE64_STANDARD.encode(credentials.as_bytes()))
             }
             Bearer(token) => Zeroizing::new(token.to_string()),
         }
