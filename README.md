@@ -1,14 +1,14 @@
 # http_req
 
 [![Rust](https://github.com/jayjamesjay/http_req/actions/workflows/rust.yml/badge.svg)](https://github.com/jayjamesjay/http_req/actions/workflows/rust.yml)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.13.0-orange.svg?longCache=true)](https://crates.io/crates/http_req)
-[![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.13.0/http_req/)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.13.2-orange.svg?longCache=true)](https://crates.io/crates/http_req)
+[![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.13.2/http_req/)
 
 Simple and lightweight HTTP client with built-in HTTPS support.
 
 - HTTP and HTTPS via [rust-native-tls](https://github.com/sfackler/rust-native-tls) (or optionally [rus-tls](https://crates.io/crates/rustls))
-- Small binary size (0.7 MB for basic GET request in default configuration)
-- Minimal amount of dependencies
+- Small binary size (0.7 MB for a basic GET request in the default configuratio)
+- Minimal number of dependencies
 
 ## Requirements
 
