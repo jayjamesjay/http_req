@@ -1,4 +1,5 @@
 //! secure connection over TLS
+
 use crate::error::Error as HttpError;
 use std::{
     fs::File,
@@ -15,7 +16,7 @@ use rustls::{ClientConnection, StreamOwned};
 use rustls_pki_types::ServerName;
 
 #[cfg(not(any(feature = "native-tls", feature = "rust-tls")))]
-compile_error!("one of the `native-tls` or `rust-tls` features must be enabled");
+compile_error!("One of the `native-tls` or `rust-tls` features must be enabled");
 
 /// Wrapper around TLS Stream, depends on selected TLS library:
 /// - native_tls: `TlsStream<S>`
@@ -53,12 +54,9 @@ where
 
         #[cfg(feature = "rust-tls")]
         {
-            // TODO: this api returns ConnectionAborted with a "..CloseNotify.." string.
-            // TODO: we should work out if self.stream.sess exposes enough information
-            // TODO: to not read in this situation, and return EOF directly.
-            // TODO: c.f. the checks in the implementation. connection_at_eof() doesn't
-            // TODO: seem to be exposed. The implementation:
-            // TODO: https://github.com/ctz/rustls/blob/f93c325ce58f2f1e02f09bcae6c48ad3f7bde542/src/session.rs#L789-L792
+            // Handle ConnectionAborted for Rust-TLS
+            // Reference to the rustls implementation:
+            // https://github.com/ctz/rustls/blob/f93c325ce58f2f1e02f09bcae6c48ad3f7bde542/src/session.rs#L789-L792
             if let Err(ref e) = len {
                 if io::ErrorKind::ConnectionAborted == e.kind() {
                     return Ok(0);
@@ -77,6 +75,7 @@ where
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         self.stream.write(buf)
     }
+
     fn flush(&mut self) -> Result<(), io::Error> {
         self.stream.flush()
     }
@@ -86,6 +85,7 @@ where
 pub struct Config {
     #[cfg(feature = "native-tls")]
     extra_root_certs: Vec<native_tls::Certificate>,
+
     #[cfg(feature = "rust-tls")]
     root_certs: std::sync::Arc<rustls::RootCertStore>,
 }
