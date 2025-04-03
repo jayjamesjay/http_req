@@ -1,6 +1,10 @@
 //! support for Transfer-Encoding: chunked
+
 use crate::CR_LF;
-use std::io::{self, BufRead, BufReader, Error, ErrorKind, Read};
+use std::{
+    cmp,
+    io::{self, BufRead, BufReader, Error, ErrorKind, Read},
+};
 
 const MAX_LINE_LENGTH: usize = 4096;
 
@@ -20,9 +24,8 @@ where
     R: Read,
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // the length of data already read out
-        let mut consumed = 0usize;
-        let mut footer = [0u8; 2];
+        let mut consumed = 0;
+        let mut footer: [u8; 2] = [0; 2];
 
         while !self.eof && self.err.is_none() {
             if self.check_end {
@@ -33,25 +36,23 @@ where
                     break;
                 }
 
-                if let Ok(_) = self.reader.read_exact(&mut footer) {
-                    if &footer != CR_LF {
-                        self.err = Some(error_malformed_chunked_encoding());
-                        break;
-                    }
+                if self.reader.read_exact(&mut footer).is_ok() && &footer != CR_LF {
+                    self.err = Some(Error::new(
+                        ErrorKind::InvalidData,
+                        "Malformed chunked encoding",
+                    ));
+                    break;
                 }
 
                 self.check_end = false;
             }
 
             if self.n == 0 {
-                if consumed > 0 && !self.chunk_header_avaliable() {
-                    // We've read enough. Don't potentially block
-                    // reading a new chunk header.
+                if consumed > 0 && !self.chunk_header_available() {
                     break;
                 }
 
                 self.begin_chunk();
-
                 continue;
             }
 
@@ -59,13 +60,9 @@ where
                 break;
             }
 
-            let end = if consumed + self.n < buf.len() {
-                consumed + self.n
-            } else {
-                buf.len()
-            };
+            let end = cmp::min(consumed + self.n, buf.len());
 
-            let mut n0 = 0usize;
+            let mut n0: usize = 0;
             match self.reader.read(&mut buf[consumed..end]) {
                 Ok(v) => n0 = v,
                 Err(err) => self.err = Some(err),
@@ -82,10 +79,7 @@ where
         }
 
         match self.err.as_ref() {
-            Some(v) => Err(Error::new(
-                v.kind(),
-                format!("wrapper by chunked: {}", v.to_string()),
-            )),
+            Some(v) => Err(Error::new(v.kind(), v.to_string())),
             None => Ok(consumed),
         }
     }
@@ -137,8 +131,11 @@ where
         }
     }
 
+    /// Begins a new chunk by reading and parsing its header.
+    ///
+    /// This function reads one full line representing the size of the next HTTP/1.x chunk.
+    /// If there is an error during this process (such as malformed data), it records that error for later use.
     fn begin_chunk(&mut self) {
-        // chunk-size CRLF
         let line = match read_chunk_line(&mut self.reader) {
             Ok(v) => v,
             Err(err) => {
@@ -149,25 +146,26 @@ where
 
         match parse_hex_uint(line) {
             Ok(v) => self.n = v,
-            Err(err) => self.err = Some(Error::new(ErrorKind::Other, err)),
+            Err(err) => self.err = Some(Error::new(ErrorKind::InvalidData, err)),
         }
 
         self.eof = self.n == 0;
     }
 
-    fn chunk_header_avaliable(&self) -> bool {
-        self.reader.buffer().iter().find(|&&c| c == b'\n').is_some()
+    /// Checks whether a chunk header is available.
+    fn chunk_header_available(&self) -> bool {
+        self.reader.buffer().iter().any(|&c| c == b'\n')
     }
 }
 
-fn error_line_too_long() -> Error {
-    Error::new(ErrorKind::Other, "header line too long")
-}
-
-fn error_malformed_chunked_encoding() -> Error {
-    Error::new(ErrorKind::Other, "malformed chunked encoding")
-}
-
+/// Checks if a given byte is an ASCII space character.
+///
+/// This function checks whether a single byte, b,
+/// represents one of the following characters:
+/// - Space (ASCII 0x20)
+/// - Tab (ASCII 0x09)
+/// - Line Feed (ASCII 0xA) or Carriage Return (ASCII 0xD), which are used to move
+///   positions in text. These two together indicate an end of line.
 fn is_ascii_space(b: u8) -> bool {
     match b {
         b' ' | b'\t' | b'\n' | b'\r' => true,
@@ -175,18 +173,20 @@ fn is_ascii_space(b: u8) -> bool {
     }
 }
 
+/// Parses an integer represented by hexadecimal digits from bytes.
 fn parse_hex_uint<'a>(data: Vec<u8>) -> Result<usize, &'a str> {
-    let mut n = 0usize;
+    let mut n = 0;
+
     for (i, v) in data.iter().enumerate() {
         if i == 16 {
-            return Err("http chunk length too large");
+            return Err("HTTP chunk length is too large");
         }
 
         let vv = match *v {
             b'0'..=b'9' => v - b'0',
             b'a'..=b'f' => v - b'a' + 10,
             b'A'..=b'F' => v - b'A' + 10,
-            _ => return Err("invalid byte in chunk length"),
+            _ => return Err("Invalid byte in chunk length"),
         };
 
         n <<= 4;
@@ -196,6 +196,7 @@ fn parse_hex_uint<'a>(data: Vec<u8>) -> Result<usize, &'a str> {
     Ok(n)
 }
 
+/// Reads a single chunk line from `BufReader<R>`.
 fn read_chunk_line<R>(b: &mut BufReader<R>) -> io::Result<Vec<u8>>
 where
     R: Read,
@@ -204,7 +205,10 @@ where
     b.read_until(b'\n', &mut line)?;
 
     if line.len() > MAX_LINE_LENGTH {
-        return Err(error_line_too_long());
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "Exceeded maximum line length",
+        ));
     }
 
     trim_trailing_whitespace(&mut line);
@@ -213,32 +217,33 @@ where
     Ok(line)
 }
 
+/// Removes any trailing chunk extensions from a vector containing bytes (`Vec<u8>`).
 fn remove_chunk_extension(v: &mut Vec<u8>) {
-    if let Some(idx) = v.iter().position(|v| *v == b';') {
-        v.resize(idx, 0);
+    if let Some(idx) = v.iter().position(|&v| v == b';') {
+        v.truncate(idx);
     }
 }
 
+/// Remove any trailing whitespace characters (specifically ASCII spaces)
+/// from the end of a vector containing bytes (`Vec<u8>`).
 fn trim_trailing_whitespace(v: &mut Vec<u8>) {
-    if v.len() == 0 {
+    if v.is_empty() {
         return;
     }
 
-    for i in (0..(v.len() - 1)).rev() {
-        if !is_ascii_space(v[i]) {
-            v.resize(i + 1, 0);
-            return;
+    while let Some(&last_byte) = v.last() {
+        if !is_ascii_space(last_byte) {
+            break;
         }
-    }
 
-    v.clear();
+        v.pop();
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::{self, Read};
-
     use super::*;
+    use std::io::{self, Read};
 
     #[test]
     fn read() {
@@ -249,6 +254,7 @@ mod tests {
 
         assert_eq!("hello, world! 0123456789abcdef".as_bytes(), &writer[..]);
     }
+
     #[test]
     fn read_multiple() {
         {
@@ -270,6 +276,7 @@ mod tests {
             assert_eq!("foo".as_bytes(), &writer[..]);
         }
     }
+
     #[test]
     fn read_partial() {
         let data: &[u8] = b"7\r\n1234567";
@@ -279,6 +286,7 @@ mod tests {
 
         assert_eq!("1234567".as_bytes(), &writer[..]);
     }
+
     #[test]
     fn read_ignore_extensions() {
         let data_str = String::from("7;ext=\"some quoted string\"\r\n")
