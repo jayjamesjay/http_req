@@ -1,14 +1,30 @@
 //! error system used around the library.
+
 use std::{error, fmt, io, num, str, sync::mpsc};
 
+/// Enum representing different parsing errors encountered by the library.
 #[derive(Debug, PartialEq)]
 pub enum ParseErr {
+    /// Error related to invalid UTF-8 character sequences encountered
+    /// during string processing or conversion operations.
     Utf8(str::Utf8Error),
+
+    /// Failure in parsing integer values from strings using standard
+    /// number formats, such as those conforming to base 10 conventions.
     Int(num::ParseIntError),
+
+    /// Issue encountered when processing status line from HTTP response message.
     StatusErr,
+
+    /// Issue encountered when processing headers from HTTP response message.
     HeadersErr,
+
+    /// Issue arising while processing URIs that contain invalid
+    /// characters or do not follow the URI specification.
     UriErr,
-    Invalid,
+
+    /// Error indicating that provided string, vector, or other element
+    /// does not contain any values that could be parsed.
     Empty,
 }
 
@@ -19,7 +35,7 @@ impl error::Error for ParseErr {
         match self {
             Utf8(e) => Some(e),
             Int(e) => Some(e),
-            StatusErr | HeadersErr | UriErr | Invalid | Empty => None,
+            _ => None,
         }
     }
 }
@@ -29,13 +45,12 @@ impl fmt::Display for ParseErr {
         use self::ParseErr::*;
 
         let err = match self {
-            Utf8(_) => "Invalid character",
+            Utf8(_) => "Invalid character sequence",
             Int(_) => "Cannot parse number",
-            Invalid => "Invalid value",
-            Empty => "Nothing to parse",
             StatusErr => "Status line contains invalid values",
             HeadersErr => "Headers contain invalid values",
             UriErr => "URI contains invalid characters",
+            Empty => "Nothing to parse",
         };
         write!(f, "ParseErr: {}", err)
     }
@@ -53,12 +68,26 @@ impl From<str::Utf8Error> for ParseErr {
     }
 }
 
+/// Enum representing various errors encountered by the library.
 #[derive(Debug)]
 pub enum Error {
+    /// IO error that occurred during file operations,
+    /// network connections, or any other type of I/O operation.
     IO(io::Error),
+
+    /// Error encountered while parsing data using the library's functions.
     Parse(ParseErr),
+
+    /// Timeout error, indicating that an operation timed out
+    /// after waiting for the specified duration.
     Timeout,
+
+    /// Error encountered while using TLS/SSL cryptographic protocols,
+    /// such as establishing secure connections with servers.
     Tls,
+
+    /// Thread-related communication error, signifying an issue
+    /// that occurred during inter-thread communication.
     Thread,
 }
 
@@ -69,7 +98,7 @@ impl error::Error for Error {
         match self {
             IO(e) => Some(e),
             Parse(e) => Some(e),
-            Timeout | Tls | Thread => None,
+            _ => None,
         }
     }
 }
@@ -79,8 +108,8 @@ impl fmt::Display for Error {
         use self::Error::*;
 
         let err = match self {
-            IO(_) => "IO error",
-            Parse(err) => return err.fmt(f),
+            IO(e) => &format!("IO Error - {}", e),
+            Parse(e) => return e.fmt(f),
             Timeout => "Timeout error",
             Tls => "TLS error",
             Thread => "Thread communication error",
