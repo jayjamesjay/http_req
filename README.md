@@ -1,8 +1,8 @@
 # http_req
 
 [![Rust](https://github.com/jayjamesjay/http_req/actions/workflows/rust.yml/badge.svg)](https://github.com/jayjamesjay/http_req/actions/workflows/rust.yml)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.13.2-orange.svg?longCache=true)](https://crates.io/crates/http_req)
-[![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.13.2/http_req/)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.13.3-orange.svg?longCache=true)](https://crates.io/crates/http_req)
+[![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.13.3/http_req/)
 
 Simple and lightweight HTTP client with built-in HTTPS support.
 
