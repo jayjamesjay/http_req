@@ -832,7 +832,11 @@ impl<'a> Request<'a> {
         let mut stream = Stream::connect(self.message.uri, self.connect_timeout)?;
         stream.set_read_timeout(self.read_timeout)?;
         stream.set_write_timeout(self.write_timeout)?;
-        stream = Stream::try_to_https(stream, self.message.uri, self.root_cert_file_pem)?;
+
+        #[cfg(any(feature = "native-tls", feature = "rust-tls"))]
+        {
+            stream = Stream::try_to_https(stream, self.message.uri, self.root_cert_file_pem)?;
+        }
 
         // Send the request message to the stream.
         let request_msg = self.message.parse();

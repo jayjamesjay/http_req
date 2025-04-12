@@ -16,7 +16,7 @@ http_req by default uses [rust-native-tls](https://crates.io/crates/native-tls),
 which relies on TLS framework provided by OS on Windows and macOS, and OpenSSL
 on all other platforms. But it also supports [rustls](https://crates.io/crates/rustls).
 
-## Features
+## All features
 
 - Support for both HTTP and HTTPS protocols via [rust-native-tls](https://crates.io/crates/native-tls) (or optionally [rustls](https://crates.io/crates/rustls))
 - Creating and sending HTTP requests using the `Request` type (with extended capabilities provided via `RequestMessage` and `Stream`)
@@ -48,6 +48,15 @@ In order to use `http_req` with `rustls` in your project, add the following line
 ```toml
 [dependencies]
 http_req = { version="^0.14", default-features = false, features = ["rust-tls"] }
+```
+
+### HTTP only
+
+In order to use `http_req` without any additional features in your project (no HTTPS, no Authentication), add the following lines to `Cargo.toml`:
+
+```toml
+[dependencies]
+http_req = { version="^0.14", default-features = false }
 ```
 
 ## Example

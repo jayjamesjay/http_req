@@ -1,15 +1,17 @@
 //! TCP stream
 
+#[cfg(any(feature = "native-tls", feature = "rust-tls"))]
+use crate::tls::{self, Conn};
 use crate::{
     error::{Error, ParseErr},
-    tls::{self, Conn},
     uri::Uri,
     CR_LF, LF,
 };
+#[cfg(any(feature = "native-tls", feature = "rust-tls"))]
+use std::path::Path;
 use std::{
     io::{self, BufRead, Read, Write},
     net::{TcpStream, ToSocketAddrs},
-    path::Path,
     sync::mpsc::{Receiver, RecvTimeoutError, Sender},
     time::{Duration, Instant},
 };
@@ -21,6 +23,7 @@ const BUF_SIZE: usize = 16 * 1000;
 #[derive(Debug)]
 pub enum Stream {
     Http(TcpStream),
+    #[cfg(any(feature = "native-tls", feature = "rust-tls"))]
     Https(Conn<TcpStream>),
 }
 
@@ -43,6 +46,7 @@ impl Stream {
     /// Checks if `uri` scheme denotes a HTTPS protocol:
     /// - If yes, attempts to establish a secure connection
     /// - Otherwise, returns the `stream` without any modification
+    #[cfg(any(feature = "native-tls", feature = "rust-tls"))]
     pub fn try_to_https(
         stream: Stream,
         uri: &Uri,
@@ -73,6 +77,7 @@ impl Stream {
     pub fn set_read_timeout(&mut self, dur: Option<Duration>) -> Result<(), Error> {
         match self {
             Stream::Http(stream) => Ok(stream.set_read_timeout(dur)?),
+            #[cfg(any(feature = "native-tls", feature = "rust-tls"))]
             Stream::Https(conn) => Ok(conn.get_mut().set_read_timeout(dur)?),
         }
     }
@@ -81,6 +86,7 @@ impl Stream {
     pub fn set_write_timeout(&mut self, dur: Option<Duration>) -> Result<(), Error> {
         match self {
             Stream::Http(stream) => Ok(stream.set_write_timeout(dur)?),
+            #[cfg(any(feature = "native-tls", feature = "rust-tls"))]
             Stream::Https(conn) => Ok(conn.get_mut().set_write_timeout(dur)?),
         }
     }
@@ -90,6 +96,7 @@ impl Read for Stream {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
         match self {
             Stream::Http(stream) => stream.read(buf),
+            #[cfg(any(feature = "native-tls", feature = "rust-tls"))]
             Stream::Https(stream) => stream.read(buf),
         }
     }
@@ -99,6 +106,7 @@ impl Write for Stream {
     fn write(&mut self, buf: &[u8]) -> Result<usize, io::Error> {
         match self {
             Stream::Http(stream) => stream.write(buf),
+            #[cfg(any(feature = "native-tls", feature = "rust-tls"))]
             Stream::Https(stream) => stream.write(buf),
         }
     }
@@ -106,6 +114,7 @@ impl Write for Stream {
     fn flush(&mut self) -> Result<(), io::Error> {
         match self {
             Stream::Http(stream) => stream.flush(),
+            #[cfg(any(feature = "native-tls", feature = "rust-tls"))]
             Stream::Https(stream) => stream.flush(),
         }
     }
@@ -318,6 +327,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(any(feature = "native-tls", feature = "rust-tls"))]
     fn stream_try_to_https() {
         {
             let uri = Uri::try_from(URI_S).unwrap();
@@ -362,6 +372,7 @@ mod tests {
 
             assert_eq!(inner_read_timeout, Some(TIMEOUT));
         }
+        #[cfg(any(feature = "native-tls", feature = "rust-tls"))]
         {
             let uri = Uri::try_from(URI_S).unwrap();
             let mut stream = Stream::connect(&uri, None).unwrap();
@@ -393,6 +404,7 @@ mod tests {
 
             assert_eq!(inner_read_timeout, Some(TIMEOUT));
         }
+        #[cfg(any(feature = "native-tls", feature = "rust-tls"))]
         {
             let uri = Uri::try_from(URI_S).unwrap();
             let mut stream = Stream::connect(&uri, None).unwrap();

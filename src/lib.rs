@@ -23,6 +23,7 @@ pub mod error;
 pub mod request;
 pub mod response;
 pub mod stream;
+#[cfg(any(feature = "native-tls", feature = "rust-tls"))]
 pub mod tls;
 pub mod uri;
 
