@@ -12,8 +12,8 @@ edition = "2021"
 
 [dependencies]
 unicase = "^2.8"
-base64 = "^0.22.1"
-zeroize = { version = "^1.8.1", features = ["zeroize_derive"] }
+base64 = { version = "^0.22.1", optional = true }
+zeroize = { version = "^1.8.1", features = ["zeroize_derive"], optional = true }
 native-tls = { version = "^0.2", optional = true }
 rustls = { version = "^0.23", optional = true }
 rustls-pemfile = { version = "^2.2", optional = true }
@@ -22,11 +22,13 @@ webpki = { version = "^0.22", optional = true }
 webpki-roots = { version = "^0.26", optional = true }
 
 [features]
-default = ["native-tls"]
+default = ["native-tls", "auth"]
 rust-tls = [
     "rustls",
     "rustls-pki-types",
     "webpki",
     "webpki-roots",
     "rustls-pemfile",
+    "auth",
 ]
+auth = ["base64", "zeroize"]

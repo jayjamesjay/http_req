@@ -7,6 +7,7 @@ use crate::{
     stream::{Stream, ThreadReceive, ThreadSend},
     uri::Uri,
 };
+#[cfg(feature = "auth")]
 use base64::prelude::*;
 use std::{
     convert::TryFrom,
@@ -17,6 +18,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+#[cfg(feature = "auth")]
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 const CR_LF: &str = "\r\n";
@@ -109,9 +111,11 @@ impl fmt::Display for HttpVersion {
 /// Authentication details:
 /// - Basic: username and password
 /// - Bearer: token
+#[cfg(feature = "auth")]
 #[derive(Debug, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct Authentication(AuthenticationType);
 
+#[cfg(feature = "auth")]
 impl Authentication {
     /// Creates a new `Authentication` of type `Basic`.
     ///
@@ -172,11 +176,13 @@ impl Authentication {
 
 /// Authentication types
 #[derive(Debug, PartialEq, Zeroize, ZeroizeOnDrop)]
+#[cfg(feature = "auth")]
 enum AuthenticationType {
     Basic { username: String, password: String },
     Bearer(String),
 }
 
+#[cfg(feature = "auth")]
 impl AuthenticationType {
     /// Returns the authentication scheme as a string.
     const fn scheme(&self) -> &str {
@@ -409,6 +415,7 @@ impl<'a> RequestMessage<'a> {
     /// let request_msg = RequestMessage::new(&addr)
     ///     .authentication(Authentication::bearer("secret456token123"));
     /// ```
+    #[cfg(feature = "auth")]
     pub fn authentication<T>(&mut self, auth: T) -> &mut Self
     where
         Authentication: From<T>,
@@ -629,6 +636,7 @@ impl<'a> Request<'a> {
     /// let request = Request::new(&addr)
     ///     .authentication(Authentication::bearer("secret456token123"));
     /// ```
+    #[cfg(feature = "auth")]
     pub fn authentication<T>(&mut self, auth: T) -> &mut Self
     where
         Authentication: From<T>,
@@ -968,6 +976,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "auth")]
     fn authentication_basic() {
         let auth = Authentication::basic("user", "password123");
         assert_eq!(
@@ -980,6 +989,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "auth")]
     fn authentication_baerer() {
         let auth = Authentication::bearer("456secret123token");
         assert_eq!(
@@ -989,6 +999,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "auth")]
     fn authentication_header() {
         {
             let auth = Authentication::basic("user", "password123");
@@ -1052,6 +1063,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "auth")]
     fn request_m_authentication() {
         let uri = Uri::try_from(URI).unwrap();
         let mut req = RequestMessage::new(&uri);
