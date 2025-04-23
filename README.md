@@ -16,7 +16,7 @@ http_req by default uses [rust-native-tls](https://crates.io/crates/native-tls),
 which relies on TLS framework provided by OS on Windows and macOS, and OpenSSL
 on all other platforms. But it also supports [rustls](https://crates.io/crates/rustls).
 
-## All features
+## All functionalities
 
 - Support for both HTTP and HTTPS protocols via [rust-native-tls](https://crates.io/crates/native-tls) (or optionally [rustls](https://crates.io/crates/rustls))
 - Creating and sending HTTP requests using the `Request` type (with extended capabilities provided via `RequestMessage` and `Stream`)
