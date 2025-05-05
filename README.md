@@ -1,20 +1,63 @@
 # http_req
 
 [![Rust](https://github.com/jayjamesjay/http_req/actions/workflows/rust.yml/badge.svg)](https://github.com/jayjamesjay/http_req/actions/workflows/rust.yml)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.13.3-orange.svg?longCache=true)](https://crates.io/crates/http_req)
-[![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.13.3/http_req/)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.14.0-orange.svg?longCache=true)](https://crates.io/crates/http_req)
+[![Docs.rs](https://docs.rs/http_req/badge.svg)](https://docs.rs/http_req/0.14.0/http_req/)
 
 Simple and lightweight HTTP client with built-in HTTPS support.
 
-- HTTP and HTTPS via [rust-native-tls](https://github.com/sfackler/rust-native-tls) (or optionally [rus-tls](https://crates.io/crates/rustls))
+- HTTP and HTTPS via [rust-native-tls](https://crates.io/crates/native-tls) (or optionally [rustls](https://crates.io/crates/rustls))
 - Small binary size (0.7 MB for a basic GET request in the default configuratio)
 - Minimal number of dependencies
 
 ## Requirements
 
-http_req by default uses [rust-native-tls](https://github.com/sfackler/rust-native-tls),
+http_req by default uses [rust-native-tls](https://crates.io/crates/native-tls),
 which relies on TLS framework provided by OS on Windows and macOS, and OpenSSL
-on all other platforms. But it also supports [rus-tls](https://crates.io/crates/rustls).
+on all other platforms. But it also supports [rustls](https://crates.io/crates/rustls).
+
+## All functionalities
+
+- Support for both HTTP and HTTPS protocols via [rust-native-tls](https://crates.io/crates/native-tls) (or optionally [rustls](https://crates.io/crates/rustls))
+- Creating and sending HTTP requests using the `Request` type (with extended capabilities provided via `RequestMessage` and `Stream`)
+- Representing HTTP responses with the `Response` type, allowing easy access to details like the status code and headers
+- Handling redirects using the `RedirectPolicy`
+- Support for Basic and Bearer authentication
+- Processing responses with `Transfer-Encoding: chunked`
+- Managing absolute `Uri`s and partial support for relative `Uri`s
+- Enforcing timeouts on requests
+- Downloading data in a streaming fashion, allowing direct saving to disk (minimizing RAM usage)
+- `Error` handling system allowing for better debugging
+- Utility functions for easily sending common request types: `get`, `head`, `post`
+
+## Usage
+
+### Default configuration
+
+In order to use `http_req` with default configuration, add the following lines to `Cargo.toml`:
+
+```toml
+[dependencies]
+http_req = "^0.14"
+```
+
+### Rustls
+
+In order to use `http_req` with `rustls` in your project, add the following lines to `Cargo.toml`:
+
+```toml
+[dependencies]
+http_req = { version="^0.14", default-features = false, features = ["rust-tls"] }
+```
+
+### HTTP only
+
+In order to use `http_req` without any additional features in your project (no HTTPS, no Authentication), add the following lines to `Cargo.toml`:
+
+```toml
+[dependencies]
+http_req = { version="^0.14", default-features = false }
+```
 
 ## Example
 
@@ -32,26 +75,6 @@ fn main() {
 ```
 
 Take a look at [more examples](https://github.com/jayjamesjay/http_req/tree/master/examples)
-
-## Usage
-
-### Default configuration
-
-In order to use `http_req` with default configuration, add the following lines to `Cargo.toml`:
-
-```toml
-[dependencies]
-http_req = "^0.13"
-```
-
-### Rustls
-
-In order to use `http_req` with `rustls` in your project, add the following lines to `Cargo.toml`:
-
-```toml
-[dependencies]
-http_req = { version="^0.13", default-features = false, features = ["rust-tls"] }
-```
 
 ## License
 

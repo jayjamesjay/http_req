@@ -1,4 +1,5 @@
 //! parsing server response
+
 use crate::{
     error::{Error, ParseErr},
     request::Method,
@@ -24,7 +25,7 @@ pub struct Response {
 }
 
 impl Response {
-    /// Creates new `Response` with head - status and headers - parsed from a slice of bytes
+    /// Creates a new `Response` with head - status and headers - parsed from a slice of bytes.
     ///
     /// # Examples
     /// ```
@@ -46,7 +47,7 @@ impl Response {
         Ok(Response { status, headers })
     }
 
-    /// Parses `Response` from slice of bytes. Writes it's body to `writer`.
+    /// Parses `Response` from slice of bytes. Writes its body to `writer`.
     ///
     /// # Examples
     /// ```
@@ -66,18 +67,23 @@ impl Response {
         T: Write,
     {
         if res.is_empty() {
-            Err(Error::Parse(ParseErr::Empty))
-        } else {
-            let pos = match find_slice(res, &CR_LF_2) {
-                Some(v) => v,
-                None => res.len(),
-            };
-
-            let response = Self::from_head(&res[..pos])?;
-            writer.write_all(&res[pos..])?;
-
-            Ok(response)
+            return Err(Error::Parse(ParseErr::Empty));
         }
+
+        let pos = match find_slice(res, &CR_LF_2) {
+            Some(v) => v,
+            None => res.len(),
+        };
+
+        // Attempt to parse the headers and status from the response
+        let response = Self::from_head(&res[..pos])?;
+
+        // Write any remaining part of the bytes (assumed body) into writer
+        if pos < res.len() {
+            writer.write_all(&res[pos..])?;
+        }
+
+        Ok(response)
     }
 
     /// Returns status code of this `Response`.
@@ -160,8 +166,8 @@ impl Response {
         &self.headers
     }
 
-    /// Returns length of the content of this `Response` as a `Option`, according to information
-    /// included in headers. If there is no such an information, returns `None`.
+    /// Returns length of the content of this `Response` as an `Option`, according to information
+    /// included in headers. If there is no such information, returns `None`.
     ///
     /// # Examples
     /// ```
@@ -184,6 +190,22 @@ impl Response {
     }
 
     /// Checks if Transfer-Encoding includes "chunked".
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::response::Response;
+    ///
+    /// const RESPONSE: &[u8; 157] = b"HTTP/1.1 200 OK\r\n\
+    ///                              Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+    ///                              Content-Type: text/html\r\n\
+    ///                              Transfer-Encoding: chunked\r\n\
+    ///                              Content-Length: 100\r\n\r\n\
+    ///                              <html>hello\r\n\r\nhello</html>";
+    /// let mut body = Vec::new();
+    ///
+    /// let response = Response::try_from(RESPONSE, &mut body).unwrap();
+    /// assert!(response.is_chunked());
+    /// ```
     pub fn is_chunked(&self) -> bool {
         self.headers()
             .get("Transfer-Encoding")
@@ -209,7 +231,12 @@ impl Response {
     }
 }
 
-/// Status of HTTP response
+/// Represents the status line of an HTTP response.
+///
+/// The `Status` encapsulates 3 components:
+/// - `version`: an HTTP version (e.g. "HTTP/1.1").
+/// - `code`: a status code (e.g. 200 for OK).
+/// - `reason`: a reason phrase associated with the status code (e.g. "OK").
 #[derive(PartialEq, Debug, Clone)]
 pub struct Status {
     version: String,
@@ -218,6 +245,7 @@ pub struct Status {
 }
 
 impl Status {
+    /// Creates a new `Status` from a version, a code, and a reason.
     pub fn new(version: &str, code: StatusCode, reason: &str) -> Status {
         Status::from((version, code, reason))
     }
@@ -242,11 +270,13 @@ impl str::FromStr for Status {
     type Err = ParseErr;
 
     fn from_str(status_line: &str) -> Result<Status, Self::Err> {
-        let mut status_line = status_line.trim().splitn(3, ' ');
+        let mut parts = status_line.trim().splitn(3, ' ');
 
-        let version = status_line.next().ok_or(ParseErr::StatusErr)?;
-        let code: StatusCode = status_line.next().ok_or(ParseErr::StatusErr)?.parse()?;
-        let reason = match status_line.next() {
+        let version = parts.next().ok_or(ParseErr::StatusErr)?;
+        let code: StatusCode = parts.next().ok_or(ParseErr::StatusErr)?.parse()?;
+
+        // Check if the reason phrase is provided
+        let reason = match parts.next() {
             Some(reason) => reason,
             None => code.reason().unwrap_or("Unknown"),
         };
@@ -255,9 +285,9 @@ impl str::FromStr for Status {
     }
 }
 
-/// Wrapper around `HashMap<Ascii<String>, String>` with additional functionality for parsing HTTP headers
+/// Wrapper around `HashMap<Ascii<String>, String>` with additional functionality for parsing HTTP headers.
 ///
-/// # Example
+/// # Examples
 /// ```
 /// use http_req::response::Headers;
 ///
@@ -398,12 +428,17 @@ impl str::FromStr for Headers {
     fn from_str(s: &str) -> Result<Headers, ParseErr> {
         let headers = s.trim();
 
+        if headers.is_empty() {
+            return Err(ParseErr::HeadersErr);
+        }
+
         if headers.lines().all(|e| e.contains(':')) {
             let headers = headers
                 .lines()
                 .map(|elem| {
                     let idx = elem.find(':').unwrap();
                     let (key, value) = elem.split_at(idx);
+
                     (Ascii::new(key.to_string()), value[1..].trim().to_string())
                 })
                 .collect();
@@ -438,9 +473,12 @@ impl fmt::Display for Headers {
     }
 }
 
-/// Code sent by a server in response to a client's request.
+/// Represents an HTTP status code.
 ///
-/// # Example
+/// An HTTP status code is a three-digit number sent by a server
+/// in response to a client's request.
+///
+/// # Examples
 /// ```
 /// use http_req::response::StatusCode;
 ///
@@ -451,7 +489,7 @@ impl fmt::Display for Headers {
 pub struct StatusCode(u16);
 
 impl StatusCode {
-    /// Creates new StatusCode from `u16` value.
+    /// Creates a new `StatusCode` from `u16` value.
     ///
     /// # Examples
     /// ```
@@ -671,14 +709,20 @@ mod tests {
     use std::convert::TryFrom;
 
     const RESPONSE: &[u8; 129] = b"HTTP/1.1 200 OK\r\n\
-                                         Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
-                                         Content-Type: text/html\r\n\
-                                         Content-Length: 100\r\n\r\n\
-                                         <html>hello</html>\r\n\r\nhello";
+                                   Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+                                   Content-Type: text/html\r\n\
+                                   Content-Length: 100\r\n\r\n\
+                                   <html>hello</html>\r\n\r\nhello";
     const RESPONSE_H: &[u8; 102] = b"HTTP/1.1 200 OK\r\n\
-                                           Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
-                                           Content-Type: text/html\r\n\
-                                           Content-Length: 100\r\n\r\n";
+                                     Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+                                     Content-Type: text/html\r\n\
+                                     Content-Length: 100\r\n\r\n";
+    const RESPONSE_C: &[u8; 157] = b"HTTP/1.1 200 OK\r\n\
+                                     Date: Sat, 11 Jan 2003 02:44:04 GMT\r\n\
+                                     Content-Type: text/html\r\n\
+                                     Transfer-Encoding: chunked\r\n\
+                                     Content-Length: 100\r\n\r\n\
+                                     <html>hello\r\n\r\nhello</html>";
     const BODY: &[u8; 27] = b"<html>hello</html>\r\n\r\nhello";
 
     const STATUS_LINE: &str = "HTTP/1.1 200 OK";
@@ -1001,6 +1045,41 @@ mod tests {
         let res = Response::try_from(RESPONSE, &mut writer).unwrap();
 
         assert_eq!(res.content_len(), Some(100));
+    }
+
+    #[test]
+    fn res_is_chunked() {
+        {
+            let mut writer = Vec::with_capacity(101);
+            let res = Response::try_from(RESPONSE, &mut writer).unwrap();
+
+            assert!(!res.is_chunked());
+        }
+        {
+            let mut writer = Vec::with_capacity(101);
+            let res = Response::try_from(RESPONSE_C, &mut writer).unwrap();
+
+            assert!(res.is_chunked());
+        }
+    }
+
+    #[test]
+    fn res_basic_info() {
+        {
+            let mut writer = Vec::with_capacity(101);
+            let res = Response::try_from(RESPONSE, &mut writer).unwrap();
+            let basic_info = res.basic_info(&Method::GET);
+
+            assert!(basic_info.contains(&"non-empty"));
+        }
+        {
+            let mut writer = Vec::with_capacity(101);
+            let res = Response::try_from(RESPONSE_C, &mut writer).unwrap();
+            let basic_info = res.basic_info(&Method::GET);
+
+            assert!(basic_info.contains(&"non-empty"));
+            assert!(basic_info.contains(&"chunked"));
+        }
     }
 
     #[test]

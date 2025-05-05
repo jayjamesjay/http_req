@@ -7,7 +7,7 @@ fn main() {
     // Container for body of a response.
     let mut body = Vec::new();
     // URL of the website.
-    let uri = Uri::try_from("http://httpbin.org/basic-auth/foo/bar").unwrap();
+    let uri = Uri::try_from("https://httpbin.org/basic-auth/foo/bar").unwrap();
     // Authentication details: username and password.
     let auth = Authentication::basic("foo", "bar");
 

@@ -1,4 +1,5 @@
 //! uri operations
+
 use crate::error::{Error, ParseErr};
 use std::{
     convert::TryFrom,
@@ -21,11 +22,14 @@ pub struct RangeC {
 impl RangeC {
     /// Creates new `RangeC` with `start` and `end`.
     ///
-    /// # Exmaples
+    /// # Examples
     /// ```
     /// use http_req::uri::RangeC;
     ///
-    /// const range: RangeC = RangeC::new(0, 20);
+    /// let range = RangeC::new(0, 20);
+    ///
+    /// assert_eq!(range.start, 0);
+    /// assert_eq!(range.end, 20);
     /// ```
     pub const fn new(start: usize, end: usize) -> RangeC {
         RangeC { start, end }
@@ -61,12 +65,12 @@ impl Index<RangeC> for String {
 
 /// Representation of Uniform Resource Identifier
 ///
-/// # Example
+/// # Examples
 /// ```
 /// use http_req::uri::Uri;
 /// use std::convert::TryFrom;
 ///
-/// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
+/// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();
 /// assert_eq!(uri.host(), Some("foo.com"));
 /// ```
 #[derive(Clone, Debug, PartialEq)]
@@ -87,12 +91,12 @@ impl<'a> Uri<'a> {
 
     /// Returns scheme of this `Uri`.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Uri;
     /// use std::convert::TryFrom;
     ///
-    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
+    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();
     /// assert_eq!(uri.scheme(), "https");
     /// ```
     pub fn scheme(&self) -> &str {
@@ -101,12 +105,12 @@ impl<'a> Uri<'a> {
 
     /// Returns information about the user included in this `Uri`.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Uri;
     /// use std::convert::TryFrom;
     ///
-    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
+    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();
     /// assert_eq!(uri.user_info(), Some("user:info"));
     /// ```
     pub fn user_info(&self) -> Option<&str> {
@@ -115,12 +119,12 @@ impl<'a> Uri<'a> {
 
     /// Returns host of this `Uri`.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Uri;
     /// use std::convert::TryFrom;
     ///
-    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
+    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();
     /// assert_eq!(uri.host(), Some("foo.com"));
     /// ```
     pub fn host(&self) -> Option<&str> {
@@ -129,12 +133,12 @@ impl<'a> Uri<'a> {
 
     /// Returns host of this `Uri` to use in a header.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Uri;
     /// use std::convert::TryFrom;
     ///
-    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
+    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();
     /// assert_eq!(uri.host_header(), Some("foo.com:12".to_string()));
     /// ```
     pub fn host_header(&self) -> Option<String> {
@@ -146,12 +150,12 @@ impl<'a> Uri<'a> {
 
     /// Returns port of this `Uri`
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Uri;
     /// use std::convert::TryFrom;
     ///
-    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
+    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();
     /// assert_eq!(uri.port(), Some(12));
     /// ```
     pub fn port(&self) -> Option<u16> {
@@ -161,12 +165,12 @@ impl<'a> Uri<'a> {
     /// Returns port corresponding to this `Uri`.
     /// Returns default port if it hasn't been set in the uri.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Uri;
     /// use std::convert::TryFrom;
     ///
-    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
+    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();
     /// assert_eq!(uri.corr_port(), 12);
     /// ```
     pub fn corr_port(&self) -> u16 {
@@ -183,12 +187,12 @@ impl<'a> Uri<'a> {
 
     /// Returns path of this `Uri`.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Uri;
     /// use std::convert::TryFrom;
     ///
-    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
+    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();
     /// assert_eq!(uri.path(), Some("/bar/baz"));
     /// ```
     pub fn path(&self) -> Option<&str> {
@@ -197,12 +201,12 @@ impl<'a> Uri<'a> {
 
     /// Returns query of this `Uri`.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Uri;
     /// use std::convert::TryFrom;
     ///
-    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
+    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();
     /// assert_eq!(uri.query(), Some("query"));
     /// ```
     pub fn query(&self) -> Option<&str> {
@@ -211,12 +215,12 @@ impl<'a> Uri<'a> {
 
     /// Returns fragment of this `Uri`.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Uri;
     /// use std::convert::TryFrom;
     ///
-    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
+    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();
     /// assert_eq!(uri.fragment(), Some("fragment"));
     /// ```
     pub fn fragment(&self) -> Option<&str> {
@@ -225,12 +229,12 @@ impl<'a> Uri<'a> {
 
     /// Returns resource `Uri` points to.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Uri;
     /// use std::convert::TryFrom;
     ///
-    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();;
+    /// let uri: Uri = Uri::try_from("https://user:info@foo.com:12/bar/baz?query#fragment").unwrap();
     /// assert_eq!(uri.resource(), "/bar/baz?query#fragment");
     /// ```
     pub fn resource(&self) -> &str {
@@ -241,6 +245,14 @@ impl<'a> Uri<'a> {
     }
 
     /// Checks if &str is a relative uri.
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::uri::Uri;
+    ///
+    /// assert!(Uri::is_relative("/relative/path"));
+    /// assert!(!Uri::is_relative("http://absolute.com"));
+    /// ```
     pub fn is_relative(raw_uri: &str) -> bool {
         raw_uri.starts_with("/")
             || raw_uri.starts_with("?")
@@ -250,6 +262,18 @@ impl<'a> Uri<'a> {
 
     /// Creates a new `Uri` from current uri and relative uri.
     /// Writes the new uri (raw string) into `relative_uri`.
+    ///
+    /// # Examples
+    /// ```
+    /// use http_req::uri::Uri;
+    /// use std::convert::TryFrom;
+    ///
+    /// let base_uri: Uri = Uri::try_from("https://example.com/base").unwrap();
+    /// let mut relative_path = String::from("/relative/path");
+    /// let new_uri = base_uri.from_relative(&mut relative_path).unwrap();
+    ///
+    /// assert_eq!(new_uri.to_string(), "https://example.com/relative/path");
+    /// ```
     pub fn from_relative(&'a self, relative_uri: &'a mut String) -> Result<Uri<'a>, Error> {
         let inner_uri = self.inner;
         let mut resource = self.resource().to_string();
@@ -258,7 +282,7 @@ impl<'a> Uri<'a> {
             Some("#") => Uri::add_part_start(&resource, relative_uri, "#"),
             Some("?") => Uri::add_part_start(&self.path().unwrap_or("/"), relative_uri, "?"),
             Some("/") => Uri::add_part_start(&resource, relative_uri, "/"),
-            Some(_) | None => Uri::add_part_end(&resource, relative_uri, "/"),
+            _ => Uri::add_part_end(&resource, relative_uri, "/"),
         };
 
         *relative_uri = if let Some(p) = self.path {
@@ -270,7 +294,7 @@ impl<'a> Uri<'a> {
         Uri::try_from(relative_uri.as_str())
     }
 
-    /// Adds a part at the beggining of the base.
+    /// Adds a part at the beginning of the base.
     /// Finds the first occurance of a separator in a base and the first occurance of a separator in a part.
     /// Joins all chars before the separator from the base, separator and all chars after the separator from the part.
     fn add_part_start(base: &str, part: &str, separator: &str) -> String {
@@ -377,7 +401,7 @@ impl<'a> TryFrom<&'a str> for Uri<'a> {
 
 /// Authority of Uri
 ///
-/// # Example
+/// # Examples
 /// ```
 /// use http_req::uri::Authority;
 /// use std::convert::TryFrom;
@@ -397,7 +421,7 @@ pub struct Authority<'a> {
 impl<'a> Authority<'a> {
     /// Returns username of this `Authority`
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Authority;
     /// use std::convert::TryFrom;
@@ -411,7 +435,7 @@ impl<'a> Authority<'a> {
 
     /// Returns password of this `Authority`
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Authority;
     /// use std::convert::TryFrom;
@@ -425,7 +449,7 @@ impl<'a> Authority<'a> {
 
     /// Returns information about the user
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Authority;
     /// use std::convert::TryFrom;
@@ -443,7 +467,7 @@ impl<'a> Authority<'a> {
 
     /// Returns host of this `Authority`
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Authority;
     /// use std::convert::TryFrom;
@@ -457,7 +481,7 @@ impl<'a> Authority<'a> {
 
     /// Returns port of this `Authority`
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use http_req::uri::Authority;
     /// use std::convert::TryFrom;
@@ -524,11 +548,6 @@ impl<'a> fmt::Display for Authority<'a> {
     }
 }
 
-/// Removes whitespace from `text`
-pub fn remove_spaces(text: &mut String) {
-    text.retain(|c| !c.is_whitespace());
-}
-
 /// Splits `s` by `separator`. If `separator` is found inside `s`, it will return two `Some` values
 /// consisting `RangeC` of each `&str`. If `separator` is at the end of `s` or it's not found,
 /// it will return tuple consisting `Some` with `RangeC` of entire `s` inside and None.
@@ -587,15 +606,6 @@ mod tests {
         "./foo/bar/buz",
         "?users#1551",
     ];
-
-    #[test]
-    fn remove_space() {
-        let mut text = String::from("Hello World     !");
-        let expect = String::from("HelloWorld!");
-
-        remove_spaces(&mut text);
-        assert_eq!(text, expect);
-    }
 
     #[test]
     fn uri_full_parse() {

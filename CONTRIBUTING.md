@@ -1,4 +1,4 @@
 # Contributing
-Code and documentation PRs are always welcome. Just remember to list out introduced changes. 
+Code contributions and documentation improvements are always welcome! Please include a clear description of the changes introduced in your pull requests.
 
-If you want to suggest some improvements, report a bug, discuss a functionality, etc., feel free to open an issue.
+For suggestions, bug reports, or feature requests, please open an issue.
