@@ -20,6 +20,8 @@ use std::{
 };
 #[cfg(feature = "auth")]
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+#[cfg(feature = "tracing")]
+use tracing::Span;
 
 const CR_LF: &str = "\r\n";
 const DEFAULT_REDIRECT_LIMIT: usize = 5;
@@ -828,6 +830,19 @@ impl<'a> Request<'a> {
     where
         T: Write,
     {
+        #[cfg(feature = "tracing")]
+        let span = tracing::info_span!(
+            "http_request",
+            otel.name = %format!("{} {}", self.message.method, self.message.uri.host().unwrap_or("")),
+            otel.kind = "client",
+            http.method = %self.message.method,
+            http.url = %self.message.uri,
+            http.status_code = tracing::field::Empty,
+            http.duration_ms = tracing::field::Empty,
+        );
+        #[cfg(feature = "tracing")]
+        let _guard = span.entered();
+
         // Set up a stream.
         let mut stream = Stream::connect(self.message.uri, self.connect_timeout)?;
         stream.set_read_timeout(self.read_timeout)?;
@@ -849,6 +864,9 @@ impl<'a> Request<'a> {
         let mut raw_response_head: Vec<u8> = Vec::new();
         let mut buf_reader = BufReader::new(stream);
 
+        #[cfg(feature = "tracing")]
+        let start = Instant::now();
+
         // Read from the stream and send over data via `sender`.
         thread::spawn(move || {
             buf_reader.send_head(&sender);
@@ -867,6 +885,13 @@ impl<'a> Request<'a> {
         // Receive and process `head` of the response.
         raw_response_head.receive(&receiver, deadline)?;
         let response = Response::from_head(&raw_response_head)?;
+
+        #[cfg(feature = "tracing")]
+        {
+            Span::current().record("http.duration_ms", start.elapsed().as_millis() as i64);
+            let status: u16 = response.status_code().into();
+            Span::current().record("http.status_code", status as i64);
+        }
 
         if response.status_code().is_redirect() {
             if let Some(location) = response.headers().get("Location") {

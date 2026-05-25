@@ -20,6 +20,7 @@ rustls-pemfile = { version = "^2.2", optional = true }
 rustls-pki-types = { version = "^1.14", features = ["alloc"], optional = true }
 webpki = { version = "^0.22", optional = true }
 webpki-roots = { version = "^1.0", optional = true }
+tracing = { version = "^0.1", optional = true }
 
 [features]
 default = ["native-tls", "auth"]
@@ -32,3 +33,4 @@ rust-tls = [
     "auth",
 ]
 auth = ["base64", "zeroize"]
+tracing = ["dep:tracing"]

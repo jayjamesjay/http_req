@@ -50,6 +50,19 @@ In order to use `http_req` with `rustls` in your project, add the following line
 http_req = { version="^0.14", default-features = false, features = ["rust-tls"] }
 ```
 
+### Tracing with open telemetry
+
+To be able to add traces to your HTTP requests if you want them in your monitoring system, you can enable the `tracing` feature.
+
+⚠️ You need to have a tracing subscriber set up in your project to be able to see the traces.
+
+In order to enable traces in `http_req` in your project, add the following lines to `Cargo.toml`:
+
+```toml
+[dependencies]
+http_req = { version="^0.14", default-features = false, features = ["tracing"] }
+```
+
 ### HTTP only
 
 In order to use `http_req` without any additional features in your project (no HTTPS, no Authentication), add the following lines to `Cargo.toml`:
